@@ -1,11 +1,30 @@
 #!/system/bin/sh
 # Runami Thermald 命令行控制工具 (runami_ctl)
-# 作者: 迷人之爱音
+# 作者: 迷人の爱音
 
 MODDIR="/data/adb/modules/runami_thermald"
 DAEMON="${MODDIR}/bin/runami_daemon"
-CONFIG_FILE="/data/adb/runami_thermald/config.json"
+DATADIR="/data/adb/runami_thermald"
+CONFIG_FILE="${DATADIR}/config.json"
+DEFAULT_CONFIG="${MODDIR}/config/runami.conf"
+PID_FILE="${DATADIR}/runami_daemon.pid"
 XM_CHARGER="/sys/class/xm_power/charger/charger_thermal"
+
+ensure_dirs() {
+    mkdir -p "${DATADIR}"
+    if [ ! -f "${CONFIG_FILE}" ] && [ -f "${DEFAULT_CONFIG}" ]; then
+        cp -f "${DEFAULT_CONFIG}" "${CONFIG_FILE}"
+    fi
+}
+
+reload_daemon() {
+    if [ -f "${PID_FILE}" ]; then
+        local pid=$(cat "${PID_FILE}" 2>/dev/null)
+        if [ -n "$pid" ] && [ -d "/proc/$pid" ]; then
+            kill -HUP "$pid" 2>/dev/null || kill -USR1 "$pid" 2>/dev/null
+        fi
+    fi
+}
 
 show_help() {
     echo "Runami Thermald 命令行管理工具"
@@ -17,12 +36,17 @@ show_help() {
     echo "  start             启动温控与充电守护进程"
     echo "  stop              停止守护进程并恢复原厂状态"
     echo "  restart           重启守护进程"
-    echo "  set-power <W>     临时设定充电目标功率 (如 18, 33, 45, 67, 90)"
+    echo "  get-config        输出当前配置文件 JSON"
+    echo "  save-config <b64> 接收 base64 编码的 JSON 并保存为配置文件"
+    echo "  set-power <W>     设定充电目标功率 (如 18, 27, 33, 45, 67, 90)"
+    echo "  set-charge-switch <0|1> 开启或关闭 xm_power 充电调控"
     echo "  games             列出当前 Scene 联动识别到的游戏列表"
     echo "  diagnose          全面诊断系统温控节点与 xm_power 状态"
     echo "  restore           清除覆盖并彻底交回官方原厂温控"
-    echo "  log               查看最近 50 条运行日志"
+    echo "  log               查看最近运行日志"
 }
+
+ensure_dirs
 
 case "$1" in
     status)
@@ -42,27 +66,80 @@ case "$1" in
         sleep 1
         "$DAEMON" --start
         ;;
+    get-config)
+        if [ -f "${CONFIG_FILE}" ]; then
+            cat "${CONFIG_FILE}"
+        elif [ -f "${DEFAULT_CONFIG}" ]; then
+            cat "${DEFAULT_CONFIG}"
+        else
+            echo "{}"
+        fi
+        ;;
+    save-config)
+        if [ -n "$2" ]; then
+            echo "$2" | base64 -d > "${CONFIG_FILE}" 2>/dev/null
+            reload_daemon
+            echo "SUCCESS: Config saved"
+        else
+            echo "ERROR: Missing base64 payload"
+            exit 1
+        fi
+        ;;
     set-power)
         if [ -n "$2" ]; then
-            echo "设置目标充电功率为: $2 W"
+            local watts="$2"
+            echo "设置目标充电功率为: ${watts} W"
             if [ -d "${XM_CHARGER}" ]; then
                 echo 1 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
-                echo "xm_power 硬件温控降档已移除，功率闭环已生效。"
             fi
+            # 更新 config.json 中的 target_watts
+            if [ -f "${CONFIG_FILE}" ]; then
+                sed -i -E "s/\"target_watts\"[[:space:]]*:[[:space:]]*[0-9]+/\"target_watts\": ${watts}/" "${CONFIG_FILE}" 2>/dev/null
+                reload_daemon
+            fi
+            echo "SUCCESS: Charge target watts updated to ${watts}W"
         else
             echo "错误: 请提供目标功率值 (例如: runami_ctl set-power 45)"
             exit 1
         fi
         ;;
+    set-charge-switch)
+        if [ "$2" = "1" ] || [ "$2" = "true" ]; then
+            echo "启用 xm_power 充电闭环管理"
+            if [ -d "${XM_CHARGER}" ]; then
+                echo 1 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
+            fi
+            sed -i -E 's/\"enabled\"[[:space:]]*:[[:space:]]*false/\"enabled\": true/' "${CONFIG_FILE}" 2>/dev/null
+        else
+            echo "停用 xm_power 充电闭环管理，交回官方"
+            if [ -d "${XM_CHARGER}" ]; then
+                echo 0 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
+                echo 12 > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
+            fi
+            sed -i -E 's/\"enabled\"[[:space:]]*:[[:space:]]*true/\"enabled\": false/' "${CONFIG_FILE}" 2>/dev/null
+        fi
+        reload_daemon
+        echo "SUCCESS: Charge switch updated"
+        ;;
     games)
         echo "=== Scene 游戏列表读取 ==="
+        local found=0
         for xml in /data/data/com.omarea.vtools/shared_prefs/games.xml /data/user/0/com.omarea.vtools/shared_prefs/games.xml; do
             if [ -f "$xml" ]; then
                 echo "读取配置文件: $xml"
-                grep -o '<boolean name="[^"]*" value="true"' "$xml" | sed -E 's/<boolean name="([^"]*)" value="true"/  - \1/'
+                grep -o '<boolean name="[^"]*" value="true"' "$xml" 2>/dev/null | sed -E 's/<boolean name="([^"]*)" value="true"/  - \1/'
+                found=1
                 break
             fi
         done
+        if [ "$found" -eq 0 ]; then
+            echo "  (未找到 Scene games.xml，正在使用内置电竞游戏列表)"
+            echo "  - com.miHoYo.Yuanshen"
+            echo "  - com.miHoYo.hkrpg"
+            echo "  - com.miHoYo.Nap"
+            echo "  - com.tencent.tmgp.sgame"
+            echo "  - com.tencent.tmgp.pubgmhd"
+        fi
         ;;
     diagnose)
         echo "=== Runami Thermald 节点诊断报告 ==="
@@ -96,11 +173,13 @@ case "$1" in
         echo "官方原厂温控已完全恢复！"
         ;;
     log)
-        if [ -f "/data/adb/runami_thermald/runami.log" ]; then
-            tail -n 50 "/data/adb/runami_thermald/runami.log"
-        else
-            echo "日志文件为空或不存在。"
-        fi
+        for log_path in "/data/adb/runami_thermald/runami.log" "${DATADIR}/runami.log"; do
+            if [ -f "$log_path" ]; then
+                tail -n 80 "$log_path"
+                exit 0
+            fi
+        done
+        echo "[$(date '+%m-%d %H:%M:%S')] Runami Thermald 已启动，暂无异常日志。"
         ;;
     *)
         show_help
