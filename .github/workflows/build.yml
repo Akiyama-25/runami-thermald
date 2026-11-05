@@ -32,13 +32,19 @@ jobs:
           chmod +x build.sh bin/runami_daemon bin/runami_ctl action.sh
           bash build.sh --test
 
-      - name: Package flashable zip
+      - name: Prepare module package
         run: |
           bash build.sh --package
 
-      - name: Upload build artifact
+      - name: Extract module version
+        id: mod_version
+        run: |
+          VER=$(grep -E '^version=' module.prop | cut -d'=' -f2 | tr -d ' \r\n')
+          echo "version=${VER:-v1.0.0}" >> $GITHUB_OUTPUT
+
+      - name: Upload flashable module artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Runami-Thermald-Module
-          path: dist/*.zip
+          name: Runami-Thermald-${{ steps.mod_version.outputs.version }}
+          path: dist/package/
           if-no-files-found: error

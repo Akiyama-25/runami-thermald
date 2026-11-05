@@ -11,7 +11,7 @@
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-red.svg)](LICENSE)
 [![CI: GitHub Actions](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF.svg)]()
 
-[特性](#核心特性) | [测试平台](#测试与适配环境) | [架构原理](#架构原理) | [WebUI 体验](#m3e-webui-设计) | [安装方法](#安装方法) | [命令行](#命令行工具) | [构建与发布](#编译与流水线)
+[特性](#核心特性) | [测试平台](#测试与适配环境) | [架构原理](#架构原理) | [WebUI 体验](#m3e-webui-设计) | [安装方法](#安装方法) | [命令行](#命令行工具) | [构建与发布](#编译与流水线) | [鸣谢](#鸣谢与协议)
 
 </div>
 
@@ -84,7 +84,7 @@
 
 ## 安装方法
 
-1. 在 GitHub Actions 或 Releases 中下载生成的模块 zip 压缩包。
+1. 在 GitHub Actions 的 Artifacts 中下载生成的 `Runami-Thermald-v1.0.0.zip`（已通过流水线直出单层标准模块压缩包，无需解压提取，下载即可直接刷入）。
 2. 打开 KernelSU / APatch / Magisk 管理器，进入「模块」页面选择「从本地安装」。
 3. 刷入完成后重启设备。
 4. 重启后在 KernelSU 管理器模块列表中，点击模块卡片即可打开 M3E 控制面板（亦可通过卡片上的“执行操作”查看即时状态）。
@@ -111,7 +111,7 @@ runami_ctl log              # 查看最近 50 条运行日志
 本项目使用 GitHub Actions 官方运行器（`ubuntu-latest`）进行自动化构建：
 
 - **日常构建（`build.yml`）**：
-  在代码 Push、PR 或手动触发时自动运行。执行脚本静态校验与 AES 引擎自检，将打包好的刷入 zip 上传至 **GitHub Actions 的 Artifacts** 供测试下载，**绝不自动发布 Release**。
+  在代码 Push、PR 或手动触发时自动运行。执行脚本静态校验与 AES 引擎自检，将散装模块文件直接作为 Artifact 输出，由 GitHub Actions 自动包装为 `Runami-Thermald-v1.0.0.zip` 供下载，**杜绝双重压缩，下载即可直接刷入**；同时**绝不自动发布 Release**。
 - **发布构建（`release.yml`）**：
   采用 **手动触发（`workflow_dispatch`）** 模式。在 GitHub Actions 页面点击“Run workflow”，将自动校验、打包并发布到 GitHub Releases，同时自动同步更新 `update.json`。
 
@@ -126,5 +126,10 @@ chmod +x build.sh
 
 ## 鸣谢与协议
 
-- 感谢开源项目 `AstraThermald`、`MiThermalScheduler`、`chg_thermal_42c`、`FlClash` 带来的启发。
-- 本项目遵循 [GPL-3.0](LICENSE) 开源协议。
+- [AstraThermald](https://github.com/Baizhi-Zero/astra_thermald) - 7-NTC 传感矩阵加权与 EMA 平滑滤波算法、锁死 8 核全在线防拔核 (Anti-MONITOR-CCC) 逻辑
+- [MiThermalScheduler](https://github.com/MiChongs/MiThermalScheduler) - 多级优先级调度裁决链、top-app 极速前台应用识别与覆盖目录热重载机制
+- [chg_thermal_42c](https://github.com/763061952/chg_thermal_42c) - xm_power 硬件级有线充电温控解除与带死区容差的动态功率闭环稳充逻辑
+- [FlClash](https://github.com/chen08209/FlClash) - Material 3 Expressive (M3E) 界面设计语言、曲奇多态形变徽章 (ShapeBadge) 与互联药丸分段按钮 (Connected Pill Buttons)
+- [fas-rs](https://github.com/shadow3aaa/fas-rs) - Scene 游戏列表 XML (games.xml) 格式解析规范与联动机制
+
+本项目遵循 [GPL-3.0](LICENSE) 开源协议。

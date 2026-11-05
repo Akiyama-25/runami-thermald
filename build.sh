@@ -2,8 +2,10 @@
 # Runami Thermald 本地与 CI 构建打包脚本
 set -e
 
-VERSION="v1.0.0"
+VERSION=$(grep -E '^version=' module.prop | cut -d'=' -f2 | tr -d ' \r\n')
+VERSION=${VERSION:-"v1.0.0"}
 DIST_DIR="dist"
+PACKAGE_DIR="${DIST_DIR}/package"
 MODULE_ZIP="${DIST_DIR}/Runami-Thermald-${VERSION}.zip"
 
 echo "=== 开始构建 Runami Thermald [${VERSION}] ==="
@@ -40,48 +42,56 @@ print('[√] AES-128-CBC (toybox awk) 往返加解密 100% 字节一致性测试
 fi
 
 if [ "$1" == "--package" ] || [ "$1" == "" ]; then
-    echo ">>> 3. 打包可刷入的 KernelSU / Magisk 模块压缩包..."
+    echo ">>> 3. 准备模块打包目录结构 (${PACKAGE_DIR})..."
+    rm -rf "${PACKAGE_DIR}"
+    mkdir -p "${PACKAGE_DIR}"
     mkdir -p "${DIST_DIR}"
     rm -f "${MODULE_ZIP}"
 
+    items_to_copy=(
+        "module.prop"
+        "action.sh"
+        "update.json"
+        "customize.sh"
+        "service.sh"
+        "post-fs-data.sh"
+        "uninstall.sh"
+        "webui.html"
+        "bin"
+        "config"
+        "webroot"
+        "webui"
+    )
+
+    for item in "${items_to_copy[@]}"; do
+        if [ -e "$item" ]; then
+            cp -r "$item" "${PACKAGE_DIR}/"
+        fi
+    done
+
+    echo ">>> 4. 打包可刷入的 KernelSU / Magisk 模块压缩包..."
     python3 -c "
 import zipfile, os
 
 zip_path = '${MODULE_ZIP}'
-items_to_zip = [
-    'module.prop',
-    'action.sh',
-    'update.json',
-    'customize.sh',
-    'service.sh',
-    'post-fs-data.sh',
-    'uninstall.sh',
-    'webui.html',
-    'bin',
-    'config',
-    'webroot',
-    'webui'
-]
+pkg_dir = '${PACKAGE_DIR}'
 
 with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
-    for item in items_to_zip:
-        if os.path.isfile(item):
-            zf.write(item, item)
-        elif os.path.isdir(item):
-            for root, dirs, files in os.walk(item):
-                for f in files:
-                    if f.startswith('.') or f.endswith('.swp'):
-                        continue
-                    full_p = os.path.join(root, f)
-                    rel_p = os.path.relpath(full_p, '.')
-                    zf.write(full_p, rel_p)
+    for root, dirs, files in os.walk(pkg_dir):
+        for f in files:
+            if f.startswith('.') or f.endswith('.swp'):
+                continue
+            full_p = os.path.join(root, f)
+            rel_p = os.path.relpath(full_p, pkg_dir)
+            zf.write(full_p, rel_p)
 
 print('Successfully created zip archive with', len(zf.namelist()), 'entries.')
 "
 
-    echo ">>> 4. 生成完整性 SHA256 校验码..."
+    echo ">>> 5. 生成完整性 SHA256 校验码..."
     sha256sum "${MODULE_ZIP}" > "${MODULE_ZIP}.sha256"
     cat "${MODULE_ZIP}.sha256"
     echo ""
     echo "[√] 模块打包完成: ${MODULE_ZIP}"
+    echo "[√] 散装模块目录就绪 (供给 GitHub Actions Artifact 免双重压缩): ${PACKAGE_DIR}"
 fi
