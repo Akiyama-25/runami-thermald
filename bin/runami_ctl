@@ -1,0 +1,108 @@
+#!/system/bin/sh
+# Runami Thermald 命令行控制工具 (runami_ctl)
+# 作者: 迷人之爱音
+
+MODDIR="/data/adb/modules/runami_thermald"
+DAEMON="${MODDIR}/bin/runami_daemon"
+CONFIG_FILE="/data/adb/runami_thermald/config.json"
+XM_CHARGER="/sys/class/xm_power/charger/charger_thermal"
+
+show_help() {
+    echo "Runami Thermald 命令行管理工具"
+    echo "用法: runami_ctl <命令> [参数]"
+    echo ""
+    echo "命令列表:"
+    echo "  status            查看当前守护进程运行状态与硬件读数"
+    echo "  status-json       输出 JSON 格式状态 (供给 WebUI)"
+    echo "  start             启动温控与充电守护进程"
+    echo "  stop              停止守护进程并恢复原厂状态"
+    echo "  restart           重启守护进程"
+    echo "  set-power <W>     临时设定充电目标功率 (如 18, 33, 45, 67, 90)"
+    echo "  games             列出当前 Scene 联动识别到的游戏列表"
+    echo "  diagnose          全面诊断系统温控节点与 xm_power 状态"
+    echo "  restore           清除覆盖并彻底交回官方原厂温控"
+    echo "  log               查看最近 50 条运行日志"
+}
+
+case "$1" in
+    status)
+        "$DAEMON" --status
+        ;;
+    status-json)
+        "$DAEMON" --status-json
+        ;;
+    start)
+        "$DAEMON" --start
+        ;;
+    stop)
+        "$DAEMON" --stop
+        ;;
+    restart)
+        "$DAEMON" --stop
+        sleep 1
+        "$DAEMON" --start
+        ;;
+    set-power)
+        if [ -n "$2" ]; then
+            echo "设置目标充电功率为: $2 W"
+            if [ -d "${XM_CHARGER}" ]; then
+                echo 1 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
+                echo "xm_power 硬件温控降档已移除，功率闭环已生效。"
+            fi
+        else
+            echo "错误: 请提供目标功率值 (例如: runami_ctl set-power 45)"
+            exit 1
+        fi
+        ;;
+    games)
+        echo "=== Scene 游戏列表读取 ==="
+        for xml in /data/data/com.omarea.vtools/shared_prefs/games.xml /data/user/0/com.omarea.vtools/shared_prefs/games.xml; do
+            if [ -f "$xml" ]; then
+                echo "读取配置文件: $xml"
+                grep -o '<boolean name="[^"]*" value="true"' "$xml" | sed -E 's/<boolean name="([^"]*)" value="true"/  - \1/'
+                break
+            fi
+        done
+        ;;
+    diagnose)
+        echo "=== Runami Thermald 节点诊断报告 ==="
+        echo "机型代号: $(getprop ro.product.device || echo unknown) ($(getprop ro.product.name))"
+        echo "系统版本: $(getprop ro.build.version.incremental)"
+        echo "mi_thermald 覆盖目录: /data/vendor/thermal/config"
+        ls -la /data/vendor/thermal/config 2>/dev/null || echo "（未创建覆盖文件）"
+        echo "xm_power 节点状态:"
+        if [ -d "${XM_CHARGER}" ]; then
+            echo "  wired_thermal_remove: $(cat ${XM_CHARGER}/wired_thermal_remove 2>/dev/null)"
+            echo "  wired_ctrl_limit: $(cat ${XM_CHARGER}/wired_ctrl_limit 2>/dev/null)"
+        else
+            echo "  警告: 当前机型或内核未挂载 xm_power 节点！"
+        fi
+        echo "CPU 核心在线状态:"
+        for i in 0 1 2 3 4 5 6 7; do
+            echo -n "  cpu$i: $(cat /sys/devices/system/cpu/cpu$i/online 2>/dev/null || echo 1) "
+        done
+        echo ""
+        ;;
+    restore)
+        echo "正在停止守护进程..."
+        "$DAEMON" --stop
+        echo "正在清除 /data/vendor/thermal/config 覆盖文件..."
+        rm -rf /data/vendor/thermal/config/*
+        echo "正在恢复 xm_power 官方充电档位..."
+        echo 0 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
+        echo 12 > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
+        echo "触发 mi_thermald 重载..."
+        setprop ctl.restart mi_thermald 2>/dev/null || echo 0 > /sys/class/thermal/thermal_message/sconfig 2>/dev/null
+        echo "官方原厂温控已完全恢复！"
+        ;;
+    log)
+        if [ -f "/data/adb/runami_thermald/runami.log" ]; then
+            tail -n 50 "/data/adb/runami_thermald/runami.log"
+        else
+            echo "日志文件为空或不存在。"
+        fi
+        ;;
+    *)
+        show_help
+        ;;
+esac

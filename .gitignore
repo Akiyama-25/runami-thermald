@@ -1,0 +1,7 @@
+dist/
+*.zip
+*.sha256
+*.log
+*.tmp
+*.swp
+.DS_Store

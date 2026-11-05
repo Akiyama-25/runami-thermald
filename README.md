@@ -1,1 +1,111 @@
-# runami-thermald
+<div align="center">
+
+# Runami Thermald
+
+**专为小米 14 (houji) HyperOS 3.0.303 量身定制的高级温控与充电调控守护模块**
+
+**作者：迷人の爱音**
+
+[![Platform: Xiaomi 14](https://img.shields.io/badge/Platform-Xiaomi%2014%20(SM8650)-orange.svg)]()
+[![System: HyperOS 3.0](https://img.shields.io/badge/System-HyperOS%203.0%20(Android%2016)-blue.svg)]()
+[![KernelSU WebUI](https://img.shields.io/badge/KernelSU-M3E%20WebUI-2E7D32.svg)]()
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-red.svg)](LICENSE)
+[![Runner: InstaBox](https://img.shields.io/badge/CI%2FCD-InstaBox%20Runner-purple.svg)]()
+
+[特性](#核心特性) | [架构原理](#架构原理) | [WebUI 体验](#m3e-webui-设计) | [安装方法](#安装方法) | [命令行](#命令行工具) | [构建](#编译打包)
+
+</div>
+
+---
+
+## 核心特性
+
+- 🌡️ **分态独立温度墙**：彻底打破传统温控一刀切。为**电竞游戏（独立温度墙）**、**亮屏日常**、**亮屏充电**、**熄屏快充**与**熄屏休眠**分别提供专属的起降温控阈值与迟滞回差。
+- 🔒 **8 核全在线防拔核 (Anti-MONITOR-CCC)**：彻底封印 HyperOS 官方温控在 50°C 强制关停超大核 Cortex-X4 与大核的粗暴机制，确保高负载游戏下帧率平稳不掉帧。
+- ⚡ **xm_power 硬件级充电闭环稳充**：通过底层 `/sys/class/xm_power/charger/charger_thermal/` 节点解除官方温控降档，配合 `wired_ctrl_limit` 硬件档位闭环调节，支持 18W / 27W / 33W / 45W / 67W / 90W 自由限流稳充，告别亮屏充电断崖式降流与过热通断。
+- 🎮 **Scene 游戏库自动秒级联动**：自动读取 Scene（`com.omarea.vtools`）标记的游戏列表，配合 `/dev/cpuset/top-app/cgroup.procs` 零开销毫秒级前台感知，0.3 秒内瞬间切入游戏专属温度墙，退出后带 5 秒防抖回退。
+- 🎨 **Material 3 Expressive (M3E) 现代化 WebUI**：深度汲取 **FlClash** 设计精髓，采用曲奇多态形变徽章（ShapeBadge Cookie Morphing）、互联药丸分段按钮（Connected Pill Buttons）、等宽呼吸状态芯片与动态发光折线图。
+- 🛡️ **硬件安全护盾 (Hardware Safety Guard)**：当检测到电池温度超过 48°C 或机身温度超过 55°C 时，看门狗自动秒级熔断回退官方原厂策略，安全无忧。
+
+---
+
+## 架构原理
+
+```
+                     [ 7-NTC 传感矩阵 ]
+       (cpu_therm, quiet_therm, charger_therm0, battery, wifi, pa)
+                              │
+                              ▼
+           [ 加权合成握持温度 + EMA 低通滤波 (α=0.25) ]
+                              │
+                              ▼
+                 [ Runami Thermald 核心状态机 ]
+       ┌──────────────────────┼──────────────────────┐
+       ▼                      ▼                      ▼
+ 【Scene 游戏感知】       【屏幕 & 充电状态】      【安全熔断看门狗】
+(games.xml + top-app)   (screen_state / status) (48°C / 55°C 熔断)
+       │                      │                      │
+       └──────────────────────┼──────────────────────┘
+                              │
+            ┌─────────────────┴─────────────────┐
+            ▼                                   ▼
+  【性能与温度墙执行器】                【充电功率闭环引擎】
+  - 解密/重写 thermal-*.conf          - wired_thermal_remove = 1
+  - 锁定 8 核 Online (防拔核)          - wired_ctrl_limit 动态档位调节
+  - 无损写入覆盖目录热生效            - 18W ~ 90W 平滑稳流
+```
+
+---
+
+## M3E WebUI 设计
+
+在 KernelSU 管理器中打开模块面板，即可享受全套 Material 3 Expressive 交互体验：
+1. **仪表盘**：直观展示板温、电池温度、实时充入功率、各 CPU 簇频点负载与动态波形。
+2. **温度墙方案**：滑动调节起控阈值（Trip Temp）与解除死区（Hysteresis），一键热重载。
+3. **充电调度**：药丸切换 18W~90W 目标功率档位，实时回显 xm_power 档位与充入电压/电流。
+4. **Scene 联动**：自动同步并列出 Scene 勾选的游戏标签。
+5. **日志与诊断**：一键节点自检与紧急回退官方温控。
+
+---
+
+## 安装方法
+
+1. 在 [Releases](https://github.com/Akiyama-25/runami-thermald/releases) 页面下载最新版 `Runami-Thermald-vX.Y.Z.zip`。
+2. 打开 KernelSU / APatch / Magisk 管理器，进入「模块」页面选择「从本地安装」。
+3. 刷入完成后重启设备。
+4. 在 KernelSU 管理器中点击模块卡片即可打开 M3E 控制面板。
+
+---
+
+## 命令行工具
+
+模块自带便捷的 `runami_ctl` 终端管理工具（需要 root 权限）：
+
+```sh
+runami_ctl status           # 查看当前硬件状态与运行模式
+runami_ctl set-power 45     # 设定充电目标功率为 45W 稳充
+runami_ctl games            # 列出 Scene 识别到的电竞游戏
+runami_ctl diagnose         # 一键诊断底层 xm_power 与 thermal 节点
+runami_ctl restore          # 清除所有覆盖，彻底交回官方原厂温控
+runami_ctl log              # 查看最近 50 条运行日志
+```
+
+---
+
+## 编译打包
+
+本项目由 **GitHub Actions** 自动化流水线负责构建，并全量托管于 **InstaBox（runami）** 自托管构建宿主机：
+- 工作流前置阶段通过 `wake-runner` 阶段按需唤醒 InstaBox 实例，免排队秒级开跑。
+- 亦可在本地执行构建脚本：
+  ```bash
+  chmod +x build.sh
+  ./build.sh --test       # 执行语法与 AES 引擎自检
+  ./build.sh --package    # 打包产出 dist/Runami-Thermald-v1.0.0.zip
+  ```
+
+---
+
+## 鸣谢与协议
+
+- 感谢开源项目 `AstraThermald`、`MiThermalScheduler`、`chg_thermal_42c`、`FlClash` 带来的启发。
+- 本项目遵循 [GPL-3.0](LICENSE) 开源协议。

@@ -1,0 +1,73 @@
+name: Build & Package Runami Thermald
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  wake-runner:
+    name: Wake InstaBox Runner
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake runami machine via InstaBox API
+        continue-on-error: true
+        env:
+          INSTABOX_API_KEY: ${{ secrets.INSTABOX_API_KEY }}
+        run: |
+          if [ -n "$INSTABOX_API_KEY" ]; then
+            echo ">>> Sending wake request to InstaBox for runami (m_agqzg6p6up64vdycn4j2n4kpyu)..."
+            curl -s -X POST "https://api.instabox.sh/v1/machines/m_agqzg6p6up64vdycn4j2n4kpyu/wake" \
+              -H "Authorization: Bearer $INSTABOX_API_KEY" || true
+            echo ">>> Waiting 12s for runner daemon to connect..."
+            sleep 12
+          else
+            echo "INSTABOX_API_KEY is not set, skipping wake."
+          fi
+
+  build:
+    name: Package KernelSU Module
+    needs: wake-runner
+    runs-on: instabox-medium
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate scripts and configuration
+        run: |
+          echo ">>> Validating shell scripts syntax..."
+          bash -n service.sh
+          bash -n customize.sh
+          bash -n uninstall.sh
+          bash -n post-fs-data.sh
+          bash -n bin/runami_daemon
+          bash -n bin/runami_ctl
+          echo ">>> Shell scripts validation passed!"
+
+      - name: Run cipher and engine unit tests
+        run: |
+          chmod +x build.sh bin/runami_daemon bin/runami_ctl
+          bash build.sh --test
+
+      - name: Package flashable zip
+        run: |
+          bash build.sh --package
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Runami-Thermald-Module
+          path: dist/*.zip
+          if-no-files-found: error
+
+      - name: Create GitHub Release (Tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.zip
+            dist/*.sha256
+          generate_release_notes: true

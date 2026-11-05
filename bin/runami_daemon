@@ -1,0 +1,366 @@
+#!/system/bin/sh
+# Runami Thermald - 核心温控与充电守护进程
+# 专为小米 14 (houji) HyperOS 3.0.303 定制
+# 作者: 迷人の爱音
+
+MODDIR="/data/adb/modules/runami_thermald"
+DATADIR="/data/adb/runami_thermald"
+CONFIG_FILE="${DATADIR}/config.json"
+DEFAULT_CONFIG="${MODDIR}/config/runami.conf"
+STATE_FILE="${DATADIR}/state.json"
+PID_FILE="${DATADIR}/runami_daemon.pid"
+LOG_FILE="${DATADIR}/runami.log"
+OVERRIDE_DIR="/data/vendor/thermal/config"
+AWK_ENC="${MODDIR}/bin/mtaes.awk"
+AWK_DEC="${MODDIR}/bin/mtdec.awk"
+
+XM_CHARGER="/sys/class/xm_power/charger/charger_thermal"
+BATT_DIR="/sys/class/power_supply/battery"
+THERMAL_MSG="/sys/class/thermal/thermal_message"
+
+mkdir -p "${DATADIR}"
+mkdir -p "${DATADIR}/templates"
+
+log() {
+    local msg="[$(date '+%m-%d %H:%M:%S')] $1"
+    echo "$msg"
+    echo "$msg" >> "${LOG_FILE}"
+    # 日志超过 1MB 自动轮转
+    if [ -f "${LOG_FILE}" ]; then
+        local size=$(wc -c < "${LOG_FILE}" 2>/dev/null || echo 0)
+        if [ "$size" -gt 1048576 ]; then
+            mv "${LOG_FILE}" "${LOG_FILE}.1"
+        fi
+    fi
+}
+
+load_config() {
+    if [ ! -f "${CONFIG_FILE}" ]; then
+        if [ -f "${DEFAULT_CONFIG}" ]; then
+            cp -f "${DEFAULT_CONFIG}" "${CONFIG_FILE}"
+        fi
+    fi
+}
+
+# 提取 JSON 值的纯轻量解析函数
+get_json_val() {
+    local file="$1"
+    local key="$2"
+    grep -o "\"${key}\"[[:space:]]*:[[:space:]]*[^,}]*" "$file" 2>/dev/null | head -n1 | sed -E 's/.*:[[:space:]]*"?([^"]*)"?/\1/'
+}
+
+# 7-NTC 传感矩阵读取与加权板温合成
+read_sensors() {
+    # 优先读小米加权机身板温
+    local board_raw=$(cat "${THERMAL_MSG}/board_sensor_temp" 2>/dev/null || echo 0)
+    if [ "$board_raw" -gt 1000 ]; then
+        BOARD_TEMP=$((board_raw / 1000))
+    elif [ "$board_raw" -gt 0 ]; then
+        BOARD_TEMP=$board_raw
+    else
+        BOARD_TEMP=35
+    fi
+
+    local batt_raw=$(cat "${BATT_DIR}/temp" 2>/dev/null || echo 300)
+    BATT_TEMP=$((batt_raw / 10))
+
+    local volt_raw=$(cat "${BATT_DIR}/voltage_now" 2>/dev/null || echo 4000000)
+    local curr_raw=$(cat "${BATT_DIR}/current_now" 2>/dev/null || echo 0)
+    # 取绝对值计算功耗与充电输入
+    if [ "$curr_raw" -lt 0 ]; then
+        curr_raw=$(( -curr_raw ))
+    fi
+    # 瓦特计算 (uA * uV / 10^12)
+    BATT_WATTS=$(( (curr_raw / 1000) * (volt_raw / 1000) / 1000000 ))
+
+    BATT_STATUS=$(cat "${BATT_DIR}/status" 2>/dev/null || echo "Discharging")
+    if [ "$BATT_STATUS" = "Charging" ] || [ "$BATT_STATUS" = "Full" ]; then
+        IS_CHARGING=1
+    else
+        IS_CHARGING=0
+    fi
+
+    local screen_raw=$(cat "${THERMAL_MSG}/screen_state" 2>/dev/null || echo 1)
+    if [ "$screen_raw" = "0" ]; then
+        SCREEN_ON=0
+    else
+        SCREEN_ON=1
+    fi
+}
+
+# 获取 Top-App 极速判定 (避免 dumpsys 阻塞)
+get_top_app() {
+    local top_pkg=""
+    for p in /dev/cpuset/top-app/cgroup.procs /dev/cpuset/top-app/tasks; do
+        if [ -f "$p" ]; then
+            for pid in $(head -n 20 "$p" 2>/dev/null); do
+                if [ -d "/proc/$pid" ]; then
+                    local cmd=$(tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null | head -n1)
+                    if [ -n "$cmd" ] && [ "$cmd" != "com.miui.home" ] && [ "$cmd" != "com.android.systemui" ] && [ "$cmd" != "com.android.launcher" ] && [ "$cmd" != "com.mi.android.globallauncher" ]; then
+                        case "$cmd" in
+                            *.*)
+                                top_pkg="$cmd"
+                                break 2
+                                ;;
+                        esac
+                    fi
+                fi
+            done
+        fi
+    done
+    echo "$top_pkg"
+}
+
+# 解析 Scene 游戏列表
+get_scene_games() {
+    local xml_paths="/data/data/com.omarea.vtools/shared_prefs/games.xml /data/user/0/com.omarea.vtools/shared_prefs/games.xml"
+    SCENE_GAMES=""
+    for xml in $xml_paths; do
+        if [ -f "$xml" ]; then
+            SCENE_GAMES=$(grep -o '<boolean name="[^"]*" value="true"' "$xml" 2>/dev/null | sed -E 's/<boolean name="([^"]*)" value="true"/\1/' | tr '\n' ' ')
+            break
+        fi
+    done
+}
+
+# 判定当前应用是否为游戏 (Scene 联动 + 预置黑名单)
+is_game_app() {
+    local pkg="$1"
+    if [ -z "$pkg" ]; then
+        return 1
+    fi
+    for g in $SCENE_GAMES com.miHoYo.Yuanshen com.miHoYo.hkrpg com.miHoYo.Nap com.tencent.tmgp.sgame com.tencent.tmgp.pubgmhd com.hypergryph.arknights; do
+        if [ "$pkg" = "$g" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# 锁定 8 核全在线防拔核机制 (Anti-MONITOR-CCC)
+enforce_cores_online() {
+    for c in 3 4 7; do
+        local node="/sys/devices/system/cpu/cpu${c}/online"
+        if [ -f "$node" ]; then
+            local state=$(cat "$node" 2>/dev/null || echo 1)
+            if [ "$state" = "0" ]; then
+                echo 1 > "$node" 2>/dev/null
+                log "恢复被拔除的核心: CPU $c 已重新置为 Online"
+            fi
+        fi
+    done
+}
+
+# xm_power 充电闭环管理引擎
+regulate_charging() {
+    local target_w="$1"
+    if [ ! -d "${XM_CHARGER}" ]; then
+        return
+    fi
+
+    if [ "$IS_CHARGING" -eq 1 ]; then
+        # 1. 移除温控降档
+        echo 1 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
+
+        local cur_gear=$(cat "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null || echo 12)
+
+        # 2. 闭环步进调控
+        if [ "$BATT_WATTS" -gt "$((target_w + 2))" ]; then
+            # 功率超标，上调档位收紧 (小米档位越大越慢)
+            if [ "$cur_gear" -lt 12 ]; then
+                echo "$((cur_gear + 1))" > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
+            fi
+        elif [ "$BATT_WATTS" -lt "$((target_w - 3))" ]; then
+            # 功率不足且温度安全时下调档位放开限制
+            if [ "$BATT_TEMP" -lt 45 ] && [ "$cur_gear" -gt 3 ]; then
+                echo "$((cur_gear - 1))" > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
+            fi
+        fi
+    else
+        # 拔掉充电器交回系统
+        echo 0 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
+    fi
+}
+
+# 动态更新 KernelSU 模块描述，让用户在管理器直观看到状态
+update_module_prop() {
+    local prop="${MODDIR}/module.prop"
+    if [ -f "$prop" ]; then
+        local desc="【${STATUS_TITLE}】方案:${ACTIVE_PROFILE_NAME} | 板温:${BOARD_TEMP}°C 电池:${BATT_TEMP}°C | 功率:${BATT_WATTS}W | Top:${CURRENT_TOP:-桌面} | 8核防拔核:生效中"
+        sed -i -E "s|^description=.*|description=${desc}|" "$prop" 2>/dev/null
+    fi
+}
+
+# 输出 JSON 状态给 WebUI 使用
+dump_status_json() {
+    read_sensors
+    get_scene_games
+    local top=$(get_top_app)
+    local is_g="false"
+    if is_game_app "$top"; then
+        is_g="true"
+    fi
+
+    local xm_gear=$(cat "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null || echo 0)
+    local xm_remove=$(cat "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null || echo 0)
+
+    # 读取 CPU 各簇频率
+    local f0=$(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_cur_freq 2>/dev/null || echo 0)
+    local f2=$(cat /sys/devices/system/cpu/cpufreq/policy2/scaling_cur_freq 2>/dev/null || echo 0)
+    local f5=$(cat /sys/devices/system/cpu/cpufreq/policy5/scaling_cur_freq 2>/dev/null || echo 0)
+    local f7=$(cat /sys/devices/system/cpu/cpufreq/policy7/scaling_cur_freq 2>/dev/null || echo 0)
+    local gpu_clk=$(cat /sys/class/kgsl/kgsl-3d0/gpuclk 2>/dev/null || echo 0)
+
+    cat <<EOF
+{
+  "running": true,
+  "device": "houji (Xiaomi 14)",
+  "activeProfile": "${ACTIVE_PROFILE:-screen_on_daily}",
+  "activeProfileName": "${ACTIVE_PROFILE_NAME:-日常亮屏模式}",
+  "statusTitle": "${STATUS_TITLE:-运行中}",
+  "topApp": "${top}",
+  "isGame": ${is_g},
+  "temps": {
+    "board": ${BOARD_TEMP:-0},
+    "battery": ${BATT_TEMP:-0}
+  },
+  "power": {
+    "charging": $([ "$IS_CHARGING" -eq 1 ] && echo true || echo false),
+    "watts": ${BATT_WATTS:-0},
+    "xmGear": ${xm_gear},
+    "xmRemove": ${xm_remove}
+  },
+  "screenOn": $([ "$SCREEN_ON" -eq 1 ] && echo true || echo false),
+  "cpus": {
+    "policy0": $((f0 / 1000)),
+    "policy2": $((f2 / 1000)),
+    "policy5": $((f5 / 1000)),
+    "policy7": $((f7 / 1000)),
+    "gpu": $((gpu_clk / 1000000))
+  },
+  "sceneGamesCount": $(echo "$SCENE_GAMES" | wc -w)
+}
+EOF
+}
+
+# 主控制循环
+main_daemon_loop() {
+    log "Runami Thermald 守护进程启动 (PID: $$)..."
+    echo $$ > "${PID_FILE}"
+    load_config
+
+    local game_hold=0
+    local last_profile=""
+    local last_state_save=0
+
+    while true; do
+        read_sensors
+        get_scene_games
+        local top=$(get_top_app)
+
+        # 1. 游戏离开防抖处理
+        if is_game_app "$top"; then
+            CURRENT_TOP="$top"
+            game_hold=5
+        else
+            if [ "$game_hold" -gt 0 ]; then
+                game_hold=$((game_hold - 1))
+            else
+                CURRENT_TOP="$top"
+            fi
+        fi
+
+        # 2. 状态机模式判定
+        if [ "$BATT_TEMP" -ge 48 ] || [ "$BOARD_TEMP" -ge 55 ]; then
+            STATUS_TITLE="过热安全保护"
+            ACTIVE_PROFILE="safety_guard"
+            ACTIVE_PROFILE_NAME="过热回退官方"
+            # 紧急熔断：交回官方
+            echo 0 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
+            echo 12 > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
+        elif [ "$game_hold" -gt 0 ]; then
+            STATUS_TITLE="电竞游戏模式"
+            ACTIVE_PROFILE="screen_on_game"
+            ACTIVE_PROFILE_NAME="游戏独立温度墙 (52°C)"
+            enforce_cores_online
+            regulate_charging 18
+        elif [ "$SCREEN_ON" -eq 1 ] && [ "$IS_CHARGING" -eq 1 ]; then
+            STATUS_TITLE="亮屏充电稳充"
+            ACTIVE_PROFILE="screen_on_charge"
+            ACTIVE_PROFILE_NAME="亮屏稳充 (44°C)"
+            enforce_cores_online
+            regulate_charging 33
+        elif [ "$SCREEN_ON" -eq 0 ] && [ "$IS_CHARGING" -eq 1 ]; then
+            STATUS_TITLE="熄屏快充模式"
+            ACTIVE_PROFILE="screen_off_charge"
+            ACTIVE_PROFILE_NAME="熄屏快充 (90W)"
+            regulate_charging 90
+        elif [ "$SCREEN_ON" -eq 1 ]; then
+            STATUS_TITLE="日常亮屏均衡"
+            ACTIVE_PROFILE="screen_on_daily"
+            ACTIVE_PROFILE_NAME="日常温度墙 (46°C)"
+            enforce_cores_online
+            regulate_charging 33
+        else
+            STATUS_TITLE="熄屏休眠降温"
+            ACTIVE_PROFILE="screen_off_idle"
+            ACTIVE_PROFILE_NAME="熄屏低功耗"
+        fi
+
+        # 状态变更日志记录
+        if [ "$ACTIVE_PROFILE" != "$last_profile" ]; then
+            log "状态切换: [${STATUS_TITLE}] -> ${ACTIVE_PROFILE_NAME} (Top: ${CURRENT_TOP:-无})"
+            last_profile="$ACTIVE_PROFILE"
+        fi
+
+        # 3. 每 5 秒写一次状态文件并更新 module.prop
+        local now=$(date +%s)
+        if [ $((now - last_state_save)) -ge 5 ]; then
+            update_module_prop
+            last_state_save=$now
+        fi
+
+        sleep 1.5
+    done
+}
+
+case "$1" in
+    --start|-s)
+        if [ -f "${PID_FILE}" ]; then
+            pid=$(cat "${PID_FILE}")
+            if [ -d "/proc/$pid" ]; then
+                echo "守护进程已在运行 (PID: $pid)"
+                exit 0
+            fi
+        fi
+        nohup "$0" --run >/dev/null 2>&1 &
+        echo "Runami Thermald 已启动"
+        ;;
+    --run)
+        main_daemon_loop
+        ;;
+    --stop|-k)
+        if [ -f "${PID_FILE}" ]; then
+            kill -9 $(cat "${PID_FILE}") 2>/dev/null
+            rm -f "${PID_FILE}"
+            echo "Runami Thermald 已停止"
+        else
+            killall -9 runami_daemon 2>/dev/null
+        fi
+        # 恢复官方状态
+        echo 0 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
+        ;;
+    --status-json)
+        dump_status_json
+        ;;
+    --status)
+        read_sensors
+        echo "Runami Thermald 运行状态:"
+        echo "板温: ${BOARD_TEMP}°C | 电池: ${BATT_TEMP}°C | 充电状态: ${BATT_STATUS} | 实时功率: ${BATT_WATTS}W"
+        echo "Top App: $(get_top_app)"
+        ;;
+    *)
+        echo "用法: $0 {--start|--stop|--status|--status-json}"
+        exit 1
+        ;;
+esac
