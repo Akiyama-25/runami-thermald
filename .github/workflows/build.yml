@@ -3,13 +3,9 @@ name: Build & Package Runami Thermald
 on:
   push:
     branches: [ main, master ]
-    tags: [ 'v*' ]
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
-
-permissions:
-  contents: write
 
 jobs:
   wake-runner:
@@ -65,12 +61,3 @@ jobs:
           name: Runami-Thermald-Module
           path: dist/*.zip
           if-no-files-found: error
-
-      - name: Create GitHub Release (Tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/*.zip
-            dist/*.sha256
-          generate_release_notes: true
