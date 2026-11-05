@@ -4,7 +4,7 @@
 
 ui_print "****************************************"
 ui_print "*         Runami Thermald v1.0.0       *"
-ui_print "*   小米 14 (houji) 专属温控与充电调控  *"
+ui_print "*      高级温控与充电调控守护程序      *"
 ui_print "*             作者: 迷人の爱音         *"
 ui_print "****************************************"
 
@@ -18,10 +18,10 @@ ui_print "  产品型号: $MODEL"
 ui_print "  系统版本: $BUILD_VER"
 
 if [ "$DEVICE" != "houji" ]; then
-    ui_print "  [提示] 当前设备代号为 $DEVICE，本模块深度针对小米 14 (houji) 优化。"
+    ui_print "  [提示] 当前设备代号为 $DEVICE，测试基准平台为小米 14 (houji)。"
     ui_print "  [提示] 其它高通骁龙 8 Gen 3 (SM8650) 机型亦可兼容运行基础温控逻辑。"
 else
-    ui_print "  [√] 完美适配小米 14 (houji) 旗舰平台！"
+    ui_print "  [√] 检测到匹配基准平台小米 14 (houji)！"
 fi
 
 # 检查内核 xm_power 充电控制支持
@@ -52,6 +52,7 @@ fi
 # 设置可执行权限
 set_perm "${MODPATH}/bin/runami_daemon" 0 0 0755
 set_perm "${MODPATH}/bin/runami_ctl" 0 0 0755
+set_perm "${MODPATH}/action.sh" 0 0 0755
 set_perm "${MODPATH}/service.sh" 0 0 0755
 set_perm "${MODPATH}/uninstall.sh" 0 0 0755
 set_perm "${MODPATH}/post-fs-data.sh" 0 0 0755
@@ -61,6 +62,6 @@ mkdir -p "${MODPATH}/system/bin"
 ln -sf "${MODPATH}/bin/runami_ctl" "${MODPATH}/system/bin/runami_ctl"
 set_perm "${MODPATH}/system/bin/runami_ctl" 0 0 0755
 
-ui_print "- 核心守护进程与 M3E WebUI 资源部署完成！"
+ui_print "- 核心守护进程与 KernelSU M3E WebUI (webroot) 资源部署完成！"
 ui_print "- 重启设备后，在 KernelSU 管理器模块列表点击即可打开控制面板。"
 ui_print "****************************************"

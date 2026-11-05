@@ -11,6 +11,7 @@ echo "=== 开始构建 Runami Thermald [${VERSION}] ==="
 if [ "$1" == "--test" ]; then
     echo ">>> 1. 运行 Shell 脚本语法静态校验..."
     bash -n service.sh
+    bash -n action.sh
     bash -n customize.sh
     bash -n uninstall.sh
     bash -n post-fs-data.sh
@@ -49,6 +50,8 @@ import zipfile, os
 zip_path = '${MODULE_ZIP}'
 items_to_zip = [
     'module.prop',
+    'action.sh',
+    'update.json',
     'customize.sh',
     'service.sh',
     'post-fs-data.sh',
@@ -56,6 +59,7 @@ items_to_zip = [
     'webui.html',
     'bin',
     'config',
+    'webroot',
     'webui'
 ]
 

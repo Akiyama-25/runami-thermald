@@ -2,29 +2,43 @@
 
 # Runami Thermald
 
-**专为小米 14 (houji) HyperOS 3.0.303 量身定制的高级温控与充电调控守护模块**
+**高级温控与充电调控守护程序（KernelSU 模块）**
 
 **作者：迷人の爱音**
 
-[![Platform: Xiaomi 14](https://img.shields.io/badge/Platform-Xiaomi%2014%20(SM8650)-orange.svg)]()
+[![KernelSU WebUI](https://img.shields.io/badge/KernelSU-M3E%20WebUI%20(webroot)-2E7D32.svg)]()
 [![System: HyperOS 3.0](https://img.shields.io/badge/System-HyperOS%203.0%20(Android%2016)-blue.svg)]()
-[![KernelSU WebUI](https://img.shields.io/badge/KernelSU-M3E%20WebUI-2E7D32.svg)]()
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-red.svg)](LICENSE)
-[![Runner: InstaBox](https://img.shields.io/badge/CI%2FCD-InstaBox%20Runner-purple.svg)]()
+[![CI: GitHub Actions](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF.svg)]()
 
-[特性](#核心特性) | [架构原理](#架构原理) | [WebUI 体验](#m3e-webui-设计) | [安装方法](#安装方法) | [命令行](#命令行工具) | [构建](#编译打包)
+[特性](#核心特性) | [测试平台](#测试与适配环境) | [架构原理](#架构原理) | [WebUI 体验](#m3e-webui-设计) | [安装方法](#安装方法) | [命令行](#命令行工具) | [构建与发布](#编译与流水线)
 
 </div>
+
+---
+
+## 测试与适配环境
+
+本模块开发与全功能测试基准环境如下：
+
+| 项目 | 测试基准配置 |
+| :--- | :--- |
+| **设备型号** | **Xiaomi 14（代号：houji）** |
+| **处理器平台** | 高通骁龙 8 Gen 3（SM8650） |
+| **系统版本** | **xiaomi.eu HyperOS 3.0.303.0.WNCCNXM（基于 Android 16.0 官方底包）** |
+| **Root 运行环境** | KernelSU（支持 APatch 与 Magisk，WebUI 遵循 KernelSU `webroot` 标准） |
+
+> **兼容性说明**：本模块算法与硬件控制逻辑基于高通骁龙 8 Gen 3 平台及小米 `mi_thermald` / `xm_power` 架构设计，在匹配平台设备上均可兼容运行。
 
 ---
 
 ## 核心特性
 
 - 🌡️ **分态独立温度墙**：彻底打破传统温控一刀切。为**电竞游戏（独立温度墙）**、**亮屏日常**、**亮屏充电**、**熄屏快充**与**熄屏休眠**分别提供专属的起降温控阈值与迟滞回差。
-- 🔒 **8 核全在线防拔核 (Anti-MONITOR-CCC)**：彻底封印 HyperOS 官方温控在 50°C 强制关停超大核 Cortex-X4 与大核的粗暴机制，确保高负载游戏下帧率平稳不掉帧。
+- 🔒 **8 核全在线防拔核 (Anti-MONITOR-CCC)**：彻底封印官方温控在 50°C 强制关停超大核 Cortex-X4 与大核的粗暴机制，确保高负载游戏下帧率平稳不掉帧。
 - ⚡ **xm_power 硬件级充电闭环稳充**：通过底层 `/sys/class/xm_power/charger/charger_thermal/` 节点解除官方温控降档，配合 `wired_ctrl_limit` 硬件档位闭环调节，支持 18W / 27W / 33W / 45W / 67W / 90W 自由限流稳充，告别亮屏充电断崖式降流与过热通断。
 - 🎮 **Scene 游戏库自动秒级联动**：自动读取 Scene（`com.omarea.vtools`）标记的游戏列表，配合 `/dev/cpuset/top-app/cgroup.procs` 零开销毫秒级前台感知，0.3 秒内瞬间切入游戏专属温度墙，退出后带 5 秒防抖回退。
-- 🎨 **Material 3 Expressive (M3E) 现代化 WebUI**：深度汲取 **FlClash** 设计精髓，采用曲奇多态形变徽章（ShapeBadge Cookie Morphing）、互联药丸分段按钮（Connected Pill Buttons）、等宽呼吸状态芯片与动态发光折线图。
+- 🎨 **Material 3 Expressive (M3E) 现代化 WebUI**：深度汲取 **FlClash** 设计精髓，采用曲奇多态形变徽章（ShapeBadge Cookie Morphing）、互联药丸分段按钮（Connected Pill Buttons）、等宽呼吸状态芯片与动态发光折线图。资源规范存放于 `webroot/`，完美兼容 KernelSU WebUI 规范。
 - 🛡️ **硬件安全护盾 (Hardware Safety Guard)**：当检测到电池温度超过 48°C 或机身温度超过 55°C 时，看门狗自动秒级熔断回退官方原厂策略，安全无忧。
 
 ---
@@ -59,7 +73,7 @@
 
 ## M3E WebUI 设计
 
-在 KernelSU 管理器中打开模块面板，即可享受全套 Material 3 Expressive 交互体验：
+本模块 WebUI 位于模块内部标准 `webroot/` 目录，完全契合 KernelSU Manager 原生 Web 界面规范：
 1. **仪表盘**：直观展示板温、电池温度、实时充入功率、各 CPU 簇频点负载与动态波形。
 2. **温度墙方案**：滑动调节起控阈值（Trip Temp）与解除死区（Hysteresis），一键热重载。
 3. **充电调度**：药丸切换 18W~90W 目标功率档位，实时回显 xm_power 档位与充入电压/电流。
@@ -70,10 +84,10 @@
 
 ## 安装方法
 
-1. 在 [Releases](https://github.com/Akiyama-25/runami-thermald/releases) 页面下载最新版 `Runami-Thermald-vX.Y.Z.zip`。
+1. 在 GitHub Actions 或 Releases 中下载生成的模块 zip 压缩包。
 2. 打开 KernelSU / APatch / Magisk 管理器，进入「模块」页面选择「从本地安装」。
 3. 刷入完成后重启设备。
-4. 在 KernelSU 管理器中点击模块卡片即可打开 M3E 控制面板。
+4. 重启后在 KernelSU 管理器模块列表中，点击模块卡片即可打开 M3E 控制面板（亦可通过卡片上的“执行操作”查看即时状态）。
 
 ---
 
@@ -92,16 +106,21 @@ runami_ctl log              # 查看最近 50 条运行日志
 
 ---
 
-## 编译打包
+## 编译与流水线
 
-本项目由 **GitHub Actions** 自动化流水线负责构建，并全量托管于 **InstaBox（runami）** 自托管构建宿主机：
-- 工作流前置阶段通过 `wake-runner` 阶段按需唤醒 InstaBox 实例，免排队秒级开跑。
-- 亦可在本地执行构建脚本：
-  ```bash
-  chmod +x build.sh
-  ./build.sh --test       # 执行语法与 AES 引擎自检
-  ./build.sh --package    # 打包产出 dist/Runami-Thermald-v1.0.0.zip
-  ```
+本项目使用 GitHub Actions 官方运行器（`ubuntu-latest`）进行自动化构建：
+
+- **日常构建（`build.yml`）**：
+  在代码 Push、PR 或手动触发时自动运行。执行脚本静态校验与 AES 引擎自检，将打包好的刷入 zip 上传至 **GitHub Actions 的 Artifacts** 供测试下载，**绝不自动发布 Release**。
+- **发布构建（`release.yml`）**：
+  采用 **手动触发（`workflow_dispatch`）** 模式。在 GitHub Actions 页面点击“Run workflow”，将自动校验、打包并发布到 GitHub Releases，同时自动同步更新 `update.json`。
+
+本地编译：
+```bash
+chmod +x build.sh
+./build.sh --test       # 执行语法与 AES 引擎自检
+./build.sh --package    # 打包产出 dist/Runami-Thermald-v1.0.0.zip
+```
 
 ---
 

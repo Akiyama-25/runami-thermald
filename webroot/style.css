@@ -1,0 +1,479 @@
+/* Runami Thermald - Material 3 Expressive (M3E) 专属样式表 */
+/* 灵感参考: Google M3 Expressive 规范 & FlClash 架构 */
+
+:root {
+  --m3e-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --m3e-standard-curve: cubic-bezier(0.2, 0.0, 0, 1.0);
+  
+  /* M3E 色系 */
+  --m3e-bg: #0e0e11;
+  --m3e-surface: #141318;
+  --m3e-surface-card: #1d1b22;
+  --m3e-surface-block: #26242c;
+  --m3e-surface-border: rgba(255, 255, 255, 0.08);
+  
+  --m3e-primary: #a8c7fa;
+  --m3e-on-primary: #062e6f;
+  --m3e-primary-container: #264379;
+  
+  --m3e-ok: #79f8b4;
+  --m3e-ok-container: #173826;
+  --m3e-on-ok-container: #8cfdc0;
+  
+  --m3e-warn: #ffb68c;
+  --m3e-warn-container: #472613;
+  --m3e-on-warn-container: #ffcca8;
+  
+  --m3e-danger: #ffb4ab;
+  --m3e-danger-container: #531c19;
+  --m3e-on-danger-container: #ffdad6;
+  
+  --m3e-text-main: #e6e1e5;
+  --m3e-text-muted: #938f94;
+  --m3e-text-sub: #787579;
+  
+  --radius-card: 24px;
+  --radius-block: 16px;
+  --radius-pill: 9999px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+body {
+  background-color: var(--m3e-bg);
+  color: var(--m3e-text-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  line-height: 1.5;
+  font-size: 14px;
+  overflow-x: hidden;
+}
+
+.mono {
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.m3e-shell {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 16px 16px 40px;
+}
+
+/* 顶栏 */
+.m3e-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.m3e-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* M3E 状态形变徽章 (FlClash Cookie-6 形变) */
+.m3e-badge {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--m3e-surface-card);
+  color: var(--m3e-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.4s var(--m3e-spring);
+  border: 1px solid var(--m3e-surface-border);
+}
+
+.m3e-badge.active {
+  background: var(--m3e-primary);
+  color: var(--m3e-on-primary);
+  /* M3 Expressive Cookie-6 多边形形变 */
+  clip-path: polygon(50% 0%, 88% 12%, 100% 50%, 88% 88%, 50% 100%, 12% 88%, 0% 50%, 12% 12%);
+  border-radius: 0;
+  transform: rotate(15deg) scale(1.05);
+  box-shadow: 0 4px 16px rgba(168, 199, 250, 0.35);
+}
+
+.m3e-badge.small {
+  width: 34px;
+  height: 34px;
+  font-size: 16px;
+  border-radius: 12px;
+}
+.m3e-badge.small.warm { background: var(--m3e-warn-container); color: var(--m3e-warn); }
+.m3e-badge.small.blue { background: var(--m3e-primary-container); color: var(--m3e-primary); }
+.m3e-badge.small.purple { background: #3c2949; color: #deb8f5; }
+
+.m3e-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.m3e-app-title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--m3e-text-main);
+}
+
+.m3e-app-subtitle {
+  font-size: 12px;
+  color: var(--m3e-text-muted);
+}
+
+/* M3E 状态指示胶囊 (DashboardChip) */
+.m3e-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.m3e-chip.ok { background: var(--m3e-ok-container); color: var(--m3e-on-ok-container); }
+.m3e-chip.warn { background: var(--m3e-warn-container); color: var(--m3e-on-warn-container); }
+.m3e-chip.idle { background: var(--m3e-surface-block); color: var(--m3e-text-muted); }
+
+.m3e-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  animation: pulse-dot 1.8s infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+/* M3 Expressive 互联药丸组 (Connected Pill Group) */
+.m3e-connected-group {
+  display: flex;
+  background: var(--m3e-surface-card);
+  border-radius: var(--radius-pill);
+  padding: 4px;
+  gap: 3px;
+  margin-bottom: 18px;
+  border: 1px solid var(--m3e-surface-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.m3e-connected-group::-webkit-scrollbar { display: none; }
+
+.m3e-connected-btn {
+  flex: 1;
+  min-width: fit-content;
+  border: none;
+  background: transparent;
+  color: var(--m3e-text-muted);
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.25s var(--m3e-standard-curve);
+}
+
+.m3e-connected-btn:active {
+  transform: scale(0.94);
+}
+
+.m3e-connected-btn.active {
+  background: var(--m3e-primary);
+  color: var(--m3e-on-primary);
+  border-radius: var(--radius-pill);
+  box-shadow: 0 3px 10px rgba(168, 199, 250, 0.25);
+  transform: scale(1.02);
+}
+
+/* 卡片布局 (DashboardCard) */
+.m3e-card {
+  background: var(--m3e-surface-card);
+  border-radius: var(--radius-card);
+  padding: 20px;
+  margin-bottom: 16px;
+  border: 1px solid var(--m3e-surface-border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.m3e-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.m3e-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.m3e-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  flex: 1;
+  margin-left: 8px;
+  color: var(--m3e-text-main);
+}
+
+.m3e-card-desc {
+  font-size: 12px;
+  color: var(--m3e-text-muted);
+  margin-bottom: 14px;
+  line-height: 1.6;
+}
+
+.m3e-metric {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.m3e-metric-val {
+  font-size: 32px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -1px;
+}
+
+.m3e-metric-unit {
+  font-size: 15px;
+  color: var(--m3e-text-muted);
+  font-weight: 500;
+}
+
+.m3e-card-sub {
+  font-size: 12px;
+  color: var(--m3e-text-sub);
+}
+
+/* 卡片内分色阶块 (DashboardBlock) */
+.m3e-block {
+  background: var(--m3e-surface-block);
+  border-radius: var(--radius-block);
+  padding: 14px 16px;
+}
+
+.m3e-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.m3e-row:last-child { border-bottom: none; }
+
+.m3e-row-label { color: var(--m3e-text-muted); font-size: 13px; }
+.m3e-row-value { font-weight: 600; font-size: 13px; }
+.m3e-row-value.highlight { color: var(--m3e-primary); }
+.m3e-row-value.ok-text { color: var(--m3e-ok); }
+
+/* SVG 动态曲线图 */
+.m3e-chart-container {
+  height: 90px;
+  background: var(--m3e-surface-block);
+  border-radius: var(--radius-block);
+  padding: 8px;
+  display: flex;
+  align-items: center;
+}
+
+.m3e-chart {
+  width: 100%;
+  height: 100%;
+}
+
+.m3e-chart-line {
+  fill: none;
+  stroke: var(--m3e-primary);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  transition: d 0.4s ease;
+}
+
+.m3e-chart-area {
+  fill: url(#chart-gradient);
+  opacity: 0.25;
+  transition: d 0.4s ease;
+}
+
+/* 进度条与频率 */
+.m3e-bar-row {
+  margin-bottom: 12px;
+}
+.m3e-bar-row:last-child { margin-bottom: 0; }
+
+.m3e-bar-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.m3e-progress {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.m3e-progress-bar {
+  height: 100%;
+  background: var(--m3e-primary);
+  border-radius: var(--radius-pill);
+  transition: width 0.3s ease;
+}
+
+/* 滑块与开关 */
+.m3e-slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.m3e-slider {
+  width: 100%;
+  accent-color: var(--m3e-primary);
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+  cursor: pointer;
+}
+
+.m3e-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.m3e-switch-title { font-size: 14px; font-weight: 600; }
+.m3e-switch-desc { font-size: 12px; color: var(--m3e-text-muted); }
+
+.m3e-switch {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 28px;
+}
+
+.m3e-switch input { opacity: 0; width: 0; height: 0; }
+
+.m3e-slider-pill {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: var(--m3e-surface-card);
+  border: 1px solid var(--m3e-surface-border);
+  transition: 0.3s var(--m3e-spring);
+  border-radius: var(--radius-pill);
+}
+
+.m3e-slider-pill:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: var(--m3e-text-muted);
+  transition: 0.3s var(--m3e-spring);
+  border-radius: 50%;
+}
+
+input:checked + .m3e-slider-pill {
+  background-color: var(--m3e-primary);
+}
+
+input:checked + .m3e-slider-pill:before {
+  transform: translateX(20px);
+  background-color: var(--m3e-on-primary);
+}
+
+/* 按钮 */
+.m3e-action-btn {
+  width: 100%;
+  padding: 12px 18px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s var(--m3e-spring);
+}
+.m3e-action-btn:active { transform: scale(0.96); }
+.m3e-action-btn.primary { background: var(--m3e-primary); color: var(--m3e-on-primary); }
+.m3e-action-btn.secondary { background: var(--m3e-surface-block); color: var(--m3e-text-main); }
+.m3e-action-btn.danger { background: var(--m3e-danger-container); color: var(--m3e-on-danger-container); }
+
+.m3e-btn-icon {
+  background: var(--m3e-surface-block);
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+}
+
+/* Scene 游戏药丸云 */
+.m3e-chips-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* 终端日志 */
+.m3e-terminal {
+  background: #08080a;
+  border-radius: var(--radius-block);
+  padding: 12px;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+  color: #79f8b4;
+  height: 220px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border: 1px solid var(--m3e-surface-border);
+}
+
+.m3e-tab-content {
+  display: none;
+}
+.m3e-tab-content.active {
+  display: block;
+  animation: fadeIn 0.25s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.m3e-footer {
+  text-align: center;
+  font-size: 11px;
+  color: var(--m3e-text-sub);
+  margin-top: 24px;
+}

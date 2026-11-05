@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Runami Thermald</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="m3e-shell">
+    <!-- 顶栏与品牌区域 -->
+    <header class="m3e-header">
+      <div class="m3e-brand">
+        <div class="m3e-badge active" id="hero-badge">
+          <svg class="m3e-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+          </svg>
+        </div>
+        <div class="m3e-titles">
+          <div class="m3e-app-title">Runami Thermald</div>
+          <div class="m3e-app-subtitle">Xiaomi 14 · HyperOS 3.0.303 · 迷人の爱音</div>
+        </div>
+      </div>
+      <div class="m3e-chip ok" id="daemon-chip">
+        <span class="m3e-dot"></span>
+        <span class="m3e-chip-text" id="daemon-chip-text">RUNNING</span>
+      </div>
+    </header>
+
+    <!-- M3 Expressive 互联导航药丸组 -->
+    <nav class="m3e-connected-group nav-group">
+      <button class="m3e-connected-btn active" data-tab="dashboard">仪表盘</button>
+      <button class="m3e-connected-btn" data-tab="profiles">温度墙</button>
+      <button class="m3e-connected-btn" data-tab="charging">充电调度</button>
+      <button class="m3e-connected-btn" data-tab="scene">Scene联动</button>
+      <button class="m3e-connected-btn" data-tab="logs">日志诊断</button>
+    </nav>
+
+    <!-- 选项卡 1: 仪表盘 -->
+    <section class="m3e-tab-content active" id="tab-dashboard">
+      <!-- 状态概览多重卡片 -->
+      <div class="m3e-grid">
+        <div class="m3e-card">
+          <div class="m3e-card-header">
+            <div class="m3e-badge small warm">🌡️</div>
+            <div class="m3e-card-title">机身板温</div>
+            <div class="m3e-chip idle" id="board-temp-chip">EMA 滤波</div>
+          </div>
+          <div class="m3e-metric">
+            <span class="m3e-metric-val" id="val-board-temp">--</span>
+            <span class="m3e-metric-unit">°C</span>
+          </div>
+          <div class="m3e-card-sub" id="board-temp-sub">NTC 加权合成握持温度</div>
+        </div>
+
+        <div class="m3e-card">
+          <div class="m3e-card-header">
+            <div class="m3e-badge small blue">⚡</div>
+            <div class="m3e-card-title">充电功率</div>
+            <div class="m3e-chip ok" id="charge-state-chip">闭环稳充</div>
+          </div>
+          <div class="m3e-metric">
+            <span class="m3e-metric-val" id="val-charge-watts">--</span>
+            <span class="m3e-metric-unit">W</span>
+          </div>
+          <div class="m3e-card-sub" id="charge-gear-sub">xm_power 硬件档位: 12</div>
+        </div>
+      </div>
+
+      <!-- 实时状态与 Top-App 宽卡片 -->
+      <div class="m3e-card">
+        <div class="m3e-card-header">
+          <div class="m3e-badge small purple">🎮</div>
+          <div class="m3e-card-title">当前运行状态</div>
+          <div class="m3e-chip warn" id="profile-chip">电竞模式</div>
+        </div>
+        <div class="m3e-block">
+          <div class="m3e-row">
+            <span class="m3e-row-label">前台活动应用</span>
+            <span class="m3e-row-value mono" id="val-top-app">检测中...</span>
+          </div>
+          <div class="m3e-row">
+            <span class="m3e-row-label">防拔核状态 (Anti-CCC)</span>
+            <span class="m3e-row-value ok-text" id="val-cores-status">8 核全部在线 (锁死)</span>
+          </div>
+          <div class="m3e-row">
+            <span class="m3e-row-label">硬件安全护盾 (Safety Guard)</span>
+            <span class="m3e-row-value ok-text" id="val-guard-status">就绪 (48°C 电池熔断线)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 实时温度与功率动态趋势 -->
+      <div class="m3e-card">
+        <div class="m3e-card-header">
+          <div class="m3e-card-title">实时温度与能耗曲线</div>
+          <div class="m3e-chip idle">动态采样</div>
+        </div>
+        <div class="m3e-chart-container">
+          <svg class="m3e-chart" id="trend-chart" viewBox="0 0 300 80" preserveAspectRatio="none">
+            <path class="m3e-chart-area" id="chart-area" d="M0,80 L0,50 L300,50 L300,80 Z"/>
+            <path class="m3e-chart-line" id="chart-line" d="M0,50 L300,50"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- CPU 各簇频点监控 -->
+      <div class="m3e-card">
+        <div class="m3e-card-header">
+          <div class="m3e-card-title">骁龙 8 Gen 3 频点状态</div>
+        </div>
+        <div class="m3e-block">
+          <div class="m3e-bar-row">
+            <div class="m3e-bar-info">
+              <span>超大核 Cortex-X4 (cpu7)</span>
+              <span class="mono" id="freq-cpu7">-- MHz</span>
+            </div>
+            <div class="m3e-progress"><div class="m3e-progress-bar" id="bar-cpu7" style="width: 60%"></div></div>
+          </div>
+          <div class="m3e-bar-row">
+            <div class="m3e-bar-info">
+              <span>大核簇 A720 (cpu5-6)</span>
+              <span class="mono" id="freq-cpu5">-- MHz</span>
+            </div>
+            <div class="m3e-progress"><div class="m3e-progress-bar" id="bar-cpu5" style="width: 50%"></div></div>
+          </div>
+          <div class="m3e-bar-row">
+            <div class="m3e-bar-info">
+              <span>大核簇 A720 (cpu2-4)</span>
+              <span class="mono" id="freq-cpu2">-- MHz</span>
+            </div>
+            <div class="m3e-progress"><div class="m3e-progress-bar" id="bar-cpu2" style="width: 45%"></div></div>
+          </div>
+          <div class="m3e-bar-row">
+            <div class="m3e-bar-info">
+              <span>能效核 A520 (cpu0-1)</span>
+              <span class="mono" id="freq-cpu0">-- MHz</span>
+            </div>
+            <div class="m3e-progress"><div class="m3e-progress-bar" id="bar-cpu0" style="width: 40%"></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 选项卡 2: 分态温度墙 -->
+    <section class="m3e-tab-content" id="tab-profiles">
+      <div class="m3e-card">
+        <div class="m3e-card-header">
+          <div class="m3e-badge small purple">🛡️</div>
+          <div class="m3e-card-title">独立温度墙方案</div>
+        </div>
+        <p class="m3e-card-desc">为不同屏幕与充电状态定制独立的起降温控阈值，彻底解决传统温控一刀切导致的日常卡顿与发热困境。</p>
+        
+        <div class="m3e-connected-group profile-select-group">
+          <button class="m3e-connected-btn active" data-profile="screen_on_game">游戏独立</button>
+          <button class="m3e-connected-btn" data-profile="screen_on_daily">亮屏日常</button>
+          <button class="m3e-connected-btn" data-profile="screen_on_charge">亮屏充电</button>
+          <button class="m3e-connected-btn" data-profile="screen_off_charge">熄屏快充</button>
+          <button class="m3e-connected-btn" data-profile="screen_off_idle">熄屏休眠</button>
+        </div>
+
+        <div class="m3e-block" style="margin-top: 16px;">
+          <div class="m3e-slider-header">
+            <span class="m3e-row-label">起控温度墙阈值 (Trip Temp)</span>
+            <span class="m3e-row-value highlight mono" id="profile-trip-display">52 °C</span>
+          </div>
+          <input type="range" class="m3e-slider" id="profile-trip-slider" min="40" max="55" step="1" value="52">
+
+          <div class="m3e-slider-header" style="margin-top: 14px;">
+            <span class="m3e-row-label">解除回差死区 (Clear Hysteresis)</span>
+            <span class="m3e-row-value mono" id="profile-hysteresis-display">3 °C</span>
+          </div>
+          <input type="range" class="m3e-slider" id="profile-hysteresis-slider" min="1" max="5" step="1" value="3">
+
+          <div class="m3e-switch-row" style="margin-top: 16px;">
+            <div class="m3e-switch-info">
+              <div class="m3e-switch-title">锁定 8 核全在线 (防拔核)</div>
+              <div class="m3e-switch-desc">彻底粉碎 50°C 离线超大核与大核的 MONITOR-CCC 逻辑</div>
+            </div>
+            <label class="m3e-switch">
+              <input type="checkbox" id="profile-lock-cores" checked>
+              <span class="m3e-slider-pill"></span>
+            </label>
+          </div>
+
+          <button class="m3e-action-btn primary" id="btn-save-profile" style="margin-top: 20px;">
+            保存并热重载到当前方案
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 选项卡 3: 充电调度 -->
+    <section class="m3e-tab-content" id="tab-charging">
+      <div class="m3e-card">
+        <div class="m3e-card-header">
+          <div class="m3e-badge small blue">⚡</div>
+          <div class="m3e-card-title">xm_power 充电闭环稳充</div>
+        </div>
+        <p class="m3e-card-desc">接管底层硬件充电档位，解除官方亮屏断崖式降流，通过动态功率闭环将充电速度平稳在指定瓦特区间。</p>
+
+        <div class="m3e-block">
+          <div class="m3e-switch-row">
+            <div class="m3e-switch-info">
+              <div class="m3e-switch-title">启用功率闭环调控</div>
+              <div class="m3e-switch-desc">写入 wired_thermal_remove 并微调 wired_ctrl_limit</div>
+            </div>
+            <label class="m3e-switch">
+              <input type="checkbox" id="charge-control-switch" checked>
+              <span class="m3e-slider-pill"></span>
+            </label>
+          </div>
+
+          <div class="m3e-section-title" style="margin-top: 16px;">目标充入功率档位</div>
+          <div class="m3e-connected-group wattage-group">
+            <button class="m3e-connected-btn" data-watts="18">18W 冰凉</button>
+            <button class="m3e-connected-btn" data-watts="27">27W 均衡</button>
+            <button class="m3e-connected-btn" data-watts="33">33W 稳充</button>
+            <button class="m3e-connected-btn active" data-watts="45">45W 极速</button>
+            <button class="m3e-connected-btn" data-watts="67">67W 澎湃</button>
+            <button class="m3e-connected-btn" data-watts="90">90W 全速</button>
+          </div>
+
+          <div class="m3e-row" style="margin-top: 16px;">
+            <span class="m3e-row-label">电池高温退让警戒线</span>
+            <span class="m3e-row-value mono">46 °C (自动降档防鼓包)</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 选项卡 4: Scene 游戏联动 -->
+    <section class="m3e-tab-content" id="tab-scene">
+      <div class="m3e-card">
+        <div class="m3e-card-header">
+          <div class="m3e-badge small warm">🎮</div>
+          <div class="m3e-card-title">Scene 游戏库自动感知</div>
+        </div>
+        <p class="m3e-card-desc">自动读取 Scene（com.omarea.vtools）的游戏标记，启动游戏瞬间（0.3s内）切入独立电竞温度墙，退出后 5 秒防抖回退。</p>
+
+        <div class="m3e-block">
+          <div class="m3e-row">
+            <span class="m3e-row-label">Scene 配置路径</span>
+            <span class="m3e-row-value mono">shared_prefs/games.xml</span>
+          </div>
+          <div class="m3e-row">
+            <span class="m3e-row-label">当前识别游戏总数</span>
+            <span class="m3e-row-value highlight mono" id="scene-game-count">-- 款</span>
+          </div>
+        </div>
+
+        <div class="m3e-section-title" style="margin-top: 16px;">已激活的游戏列表</div>
+        <div class="m3e-chips-cloud" id="scene-games-list">
+          <!-- 动态渲染游戏药丸 -->
+          <span class="m3e-chip idle">正在读取 Scene 游戏库...</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 选项卡 5: 日志诊断 -->
+    <section class="m3e-tab-content" id="tab-logs">
+      <div class="m3e-card">
+        <div class="m3e-card-header">
+          <div class="m3e-card-title">守护日志与节点诊断</div>
+          <button class="m3e-btn-icon" id="btn-refresh-log">🔄</button>
+        </div>
+        <div class="m3e-terminal" id="log-terminal">
+正在读取运行日志...
+        </div>
+        <div class="m3e-row" style="margin-top: 12px; gap: 8px;">
+          <button class="m3e-action-btn secondary" id="btn-diagnose">一键节点自检</button>
+          <button class="m3e-action-btn danger" id="btn-restore-stock">紧急恢复官方温控</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 底部状态与版权 -->
+    <footer class="m3e-footer">
+      <span>Runami Thermald v1.0.0 · 由 迷人の爱音 倾心打造</span>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,88 @@
+name: Release Runami Thermald
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: '发布版本标签 (例如 v1.0.0，留空则自动读取 module.prop 中的 version)'
+        required: false
+        default: ''
+      release_title:
+        description: 'Release 标题 (留空则默认为版本标签)'
+        required: false
+        default: ''
+      release_notes:
+        description: '版本更新说明与日志'
+        required: false
+        default: 'Runami Thermald 最新版本发布'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version tag
+        id: get_version
+        run: |
+          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
+            TAG="${{ github.event.inputs.tag_name }}"
+          else
+            PROP_VER=$(grep -E '^version=' module.prop | cut -d'=' -f2 | tr -d ' \r\n')
+            TAG="${PROP_VER}"
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          TITLE="${{ github.event.inputs.release_title }}"
+          if [ -z "$TITLE" ]; then
+            TITLE="${TAG}"
+          fi
+          echo "title=${TITLE}" >> $GITHUB_OUTPUT
+
+      - name: Validate scripts and test cipher
+        run: |
+          chmod +x build.sh bin/runami_daemon bin/runami_ctl action.sh
+          bash build.sh --test
+
+      - name: Package flashable zip
+        run: |
+          bash build.sh --package
+
+      - name: Update update.json
+        run: |
+          TAG="${{ steps.get_version.outputs.tag }}"
+          VER_CODE=$(grep -E '^versionCode=' module.prop | cut -d'=' -f2 | tr -d ' \r\n')
+          cat <<EOF > update.json
+          {
+            "version": "${TAG}",
+            "versionCode": ${VER_CODE:-100},
+            "zipUrl": "https://github.com/${{ github.repository }}/releases/download/${TAG}/Runami-Thermald-${TAG}.zip",
+            "changelog": "https://raw.githubusercontent.com/${{ github.repository }}/main/README.md"
+          }
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet update.json; then
+            git add update.json
+            git commit -m "chore(release): update update.json for ${TAG} [skip ci]"
+            git push origin main || true
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.tag }}
+          name: ${{ steps.get_version.outputs.title }}
+          body: ${{ github.event.inputs.release_notes }}
+          files: |
+            dist/*.zip
+            dist/*.sha256
+          draft: false
+          prerelease: false
+          generate_release_notes: true
