@@ -11,11 +11,20 @@ fi
 killall -9 runami_daemon 2>/dev/null
 
 # 2. 彻底交回 xm_power 官方充电控制
-XM_CHARGER="/sys/class/xm_power/charger/charger_thermal"
-if [ -d "${XM_CHARGER}" ]; then
-    echo 0 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
-    echo 12 > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
-fi
+for p in \
+    "/sys/class/xm_power/charger/charger_thermal" \
+    "/sys/class/xm_power/charger_thermal" \
+    "/sys/class/xm_power/charge_interface" \
+    "/sys/class/xm_power/charger/charge_interface" \
+    "/sys/class/xm_power" \
+    "/sys/class/power_supply/battery"; do
+    if [ -f "$p/wired_thermal_remove" ]; then
+        echo 0 > "$p/wired_thermal_remove" 2>/dev/null
+    fi
+    if [ -f "$p/wired_ctrl_limit" ]; then
+        echo 12 > "$p/wired_ctrl_limit" 2>/dev/null
+    fi
+done
 
 # 3. 清理 /data/vendor/thermal/config 覆盖文件并重启原厂 mi_thermald
 rm -rf /data/vendor/thermal/config/* 2>/dev/null

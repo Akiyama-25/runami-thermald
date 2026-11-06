@@ -1,9 +1,8 @@
-/* Runami Thermald - Material 3 Expressive (M3E) 专属样式表 */
-/* 灵感参考: Google Material 3 Expressive 规范 & FlClash 架构 */
+/* Runami Thermald - Material 3 Expressive (M3E) 纯净实机调优样式表 */
+/* 设计准则: 零描边、零投射阴影、纯净色阶区分、减少AI概念感、遵循Android原生系统质感 */
 
 :root {
-  --m3e-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --m3e-standard-curve: cubic-bezier(0.2, 0.0, 0, 1.0);
+  --m3e-spring: cubic-bezier(0.2, 0.0, 0, 1.0);
   
   /* 优先对接 KernelSU 动态莫奈取色 (/internal/colors.css)，无动态取色时优雅回退 */
   --m3e-primary: var(--primary, #a8c7fa);
@@ -14,30 +13,30 @@
   --m3e-secondary: var(--secondary, #bec6dc);
   --m3e-secondary-container: var(--secondaryContainer, #3b4858);
   
-  --m3e-bg: var(--background, #0e0e11);
-  --m3e-surface: var(--surface, #141318);
-  --m3e-surface-card: var(--surfaceContainer, #1d1b22);
-  --m3e-surface-block: var(--surfaceContainerHigh, #26242c);
-  --m3e-surface-border: var(--outlineVariant, rgba(255, 255, 255, 0.08));
+  /* 纯净自然深色系 (依靠表面色阶区隔，完全摒弃边缘高亮描边与悬浮阴影) */
+  --m3e-bg: var(--background, #101116);
+  --m3e-surface: var(--surface, #14151c);
+  --m3e-surface-card: var(--surfaceContainer, #191a22);
+  --m3e-surface-block: var(--surfaceContainerHigh, #21232e);
   
-  --m3e-text-main: var(--onSurface, #e6e1e5);
-  --m3e-text-muted: var(--onSurfaceVariant, #938f94);
-  --m3e-text-sub: var(--outline, #787579);
+  --m3e-text-main: var(--onSurface, #f2f3f7);
+  --m3e-text-muted: var(--onSurfaceVariant, #a2a6b8);
+  --m3e-text-sub: var(--outline, #73778a);
   
-  --m3e-ok: var(--tertiary, #79f8b4);
-  --m3e-ok-container: var(--tertiaryContainer, #173826);
-  --m3e-on-ok-container: var(--onTertiaryContainer, #8cfdc0);
+  --m3e-ok: var(--tertiary, #6eedaa);
+  --m3e-ok-container: var(--tertiaryContainer, #123824);
+  --m3e-on-ok-container: var(--onTertiaryContainer, #8bfcc0);
   
-  --m3e-warn: var(--error, #ffb68c);
-  --m3e-warn-container: var(--errorContainer, #472613);
-  --m3e-on-warn-container: var(--onErrorContainer, #ffcca8);
+  --m3e-warn: var(--error, #ffb37c);
+  --m3e-warn-container: var(--errorContainer, #442410);
+  --m3e-on-warn-container: var(--onErrorContainer, #ffcdad);
   
   --m3e-danger: var(--error, #ffb4ab);
-  --m3e-danger-container: var(--errorContainer, #531c19);
+  --m3e-danger-container: var(--errorContainer, #4f1816);
   --m3e-on-danger-container: var(--onErrorContainer, #ffdad6);
   
-  --radius-card: 24px;
-  --radius-block: 16px;
+  --radius-card: 16px;
+  --radius-block: 12px;
   --radius-pill: 9999px;
 }
 
@@ -49,90 +48,66 @@
   user-select: none;
 }
 
-body {
+html, body {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  touch-action: pan-y;
   background-color: var(--m3e-bg);
   color: var(--m3e-text-main);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Noto Sans CJK SC", sans-serif;
   line-height: 1.5;
   font-size: 14px;
-  overflow-x: hidden;
-  transition: background-color 0.3s ease, color 0.3s ease;
-  padding-top: var(--inset-top, 0px);
-  padding-bottom: var(--inset-bottom, 0px);
+  transition: background-color 0.25s ease, color 0.25s ease;
+  padding-top: var(--inset-top, env(safe-area-inset-top, 0px));
+  padding-bottom: var(--inset-bottom, env(safe-area-inset-bottom, 0px));
 }
 
 .mono {
-  font-family: "JetBrains Mono", Consolas, monospace;
+  font-family: "JetBrains Mono", Consolas, Menlo, monospace;
   font-variant-numeric: tabular-nums;
 }
 
+/* 主容器 */
 .m3e-shell {
-  max-width: 680px;
+  width: 100%;
+  max-width: 580px;
   margin: 0 auto;
-  padding: 16px 16px 40px;
+  padding: 14px 14px 44px;
 }
 
-/* 顶栏 */
+/* 顶栏 (去描边、去浮动动画、极简原生质感) */
 .m3e-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   gap: 12px;
 }
 
 .m3e-brand {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
   flex: 1;
 }
 
-/* M3E 状态形变徽章 (FlClash Cookie-6 / Cookie-9 动效形变) */
 .m3e-badge {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
-  border-radius: 50%;
-  background: var(--m3e-surface-card);
-  color: var(--m3e-text-muted);
+  border-radius: 12px;
+  background: var(--m3e-primary-container);
+  color: var(--m3e-on-primary-container);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.45s var(--m3e-spring);
-  border: 1px solid var(--m3e-surface-border);
 }
-
-.m3e-badge.active {
-  background: var(--m3e-primary);
-  color: var(--m3e-on-primary);
-  clip-path: polygon(50% 0%, 85% 15%, 100% 50%, 85% 85%, 50% 100%, 15% 85%, 0% 50%, 15% 15%);
-  border-radius: 0;
-  transform: rotate(15deg) scale(1.05);
-  box-shadow: 0 6px 20px rgba(168, 199, 250, 0.35);
-  animation: m3eCookieFloat 3.6s ease-in-out infinite alternate;
-}
-
-@keyframes m3eCookieFloat {
-  0% { transform: rotate(10deg) scale(1.02); }
-  100% { transform: rotate(18deg) scale(1.06); }
-}
-
-.m3e-badge.small {
-  width: 36px;
-  height: 36px;
-  font-size: 16px;
-  border-radius: 12px;
-  flex-shrink: 0;
-}
-.m3e-badge.small.warm { background: var(--m3e-warn-container); color: var(--m3e-warn); }
-.m3e-badge.small.blue { background: var(--m3e-primary-container); color: var(--m3e-primary); }
-.m3e-badge.small.purple { background: #3c2949; color: #deb8f5; }
 
 .m3e-icon {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
 }
 
 .m3e-titles {
@@ -141,9 +116,9 @@ body {
 }
 
 .m3e-app-title {
-  font-size: 19px;
+  font-size: 17px;
   font-weight: 700;
-  letter-spacing: -0.3px;
+  letter-spacing: -0.2px;
   color: var(--m3e-text-main);
   white-space: nowrap;
   overflow: hidden;
@@ -156,22 +131,28 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  margin-top: 1px;
 }
 
-/* M3E 状态指示胶囊 (DashboardChip) */
+/* 状态芯片 (去外描边与荧光外发光) */
 .m3e-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 12px;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
   border-radius: var(--radius-pill);
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
-  transition: all 0.25s var(--m3e-spring);
+}
+
+.m3e-chip.mini {
+  height: 20px;
+  padding: 0 7px;
+  font-size: 10px;
 }
 
 .m3e-chip.ok { background: var(--m3e-ok-container); color: var(--m3e-on-ok-container); }
@@ -179,95 +160,110 @@ body {
 .m3e-chip.idle { background: var(--m3e-surface-block); color: var(--m3e-text-muted); }
 
 .m3e-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background-color: currentColor;
-  box-shadow: 0 0 8px currentColor;
-  animation: pulse-dot 1.8s infinite;
 }
 
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.35; transform: scale(0.85); }
+/* 标签 Badge */
+.m3e-badge-tag {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--m3e-surface-block);
+  color: var(--m3e-text-muted);
+}
+.m3e-badge-tag.high {
+  background: var(--m3e-primary-container);
+  color: var(--m3e-on-primary-container);
 }
 
-/* M3 Expressive 互联药丸组 (Connected Pill Group) */
-.m3e-connected-group {
+/* 导航栏 (彻底移除边框描边与外阴影) */
+.m3e-connected-group.nav-group {
+  position: relative;
   display: flex;
+  width: 100%;
   background: var(--m3e-surface-card);
   border-radius: var(--radius-pill);
-  padding: 4px;
-  gap: 4px;
-  margin-bottom: 18px;
-  border: 1px solid var(--m3e-surface-border);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+  padding: 3px;
+  gap: 2px;
+  margin-bottom: 16px;
 }
-.m3e-connected-group::-webkit-scrollbar { display: none; }
+
+.m3e-nav-indicator {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  width: 0;
+  border-radius: var(--radius-pill);
+  background: var(--m3e-primary);
+  transition: transform 0.28s var(--m3e-spring), width 0.28s var(--m3e-spring);
+  z-index: 1;
+  pointer-events: none;
+}
 
 .m3e-connected-btn {
-  flex: 1 0 auto;
-  min-width: fit-content;
+  position: relative;
+  z-index: 2;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 2px;
   border: none;
   background: transparent;
   color: var(--m3e-text-muted);
-  padding: 9px 15px;
-  font-size: 13px;
-  font-weight: 600;
-  border-radius: 10px;
   cursor: pointer;
+  border-radius: var(--radius-pill);
+  transition: color 0.2s ease;
+  font-size: 12.5px;
+  font-weight: 600;
   white-space: nowrap;
-  text-align: center;
-  transition: all 0.26s var(--m3e-spring);
-}
-
-.m3e-connected-btn:active {
-  transform: scale(0.94);
+  outline: none;
 }
 
 .m3e-connected-btn.active {
-  background: var(--m3e-primary);
   color: var(--m3e-on-primary);
-  border-radius: var(--radius-pill);
-  box-shadow: 0 4px 14px rgba(168, 199, 250, 0.3);
-  transform: scale(1.02);
+  font-weight: 700;
 }
 
-/* 卡片布局 (DashboardCard) */
+/* 卡片系统 (全平坦色阶，无任何描边与阴影) */
 .m3e-card {
   background: var(--m3e-surface-card);
   border-radius: var(--radius-card);
-  padding: 20px;
-  margin-bottom: 16px;
-  border: 1px solid var(--m3e-surface-border);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-  transition: transform 0.24s var(--m3e-spring), border-color 0.25s ease, box-shadow 0.25s ease;
-}
-
-.m3e-card:hover {
-  border-color: rgba(255, 255, 255, 0.14);
+  padding: 16px;
+  margin-bottom: 12px;
 }
 
 .m3e-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  gap: 10px;
 }
 
 .m3e-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   gap: 8px;
 }
 
+.m3e-card-header-compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 6px;
+}
+
 .m3e-card-title {
-  font-size: 15.5px;
-  font-weight: 600;
-  flex: 1;
+  font-size: 14.5px;
+  font-weight: 700;
   color: var(--m3e-text-main);
   white-space: nowrap;
   overflow: hidden;
@@ -275,123 +271,183 @@ body {
 }
 
 .m3e-card-desc {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--m3e-text-muted);
-  margin-bottom: 14px;
-  line-height: 1.6;
+  margin-bottom: 12px;
+  line-height: 1.5;
 }
 
+/* 核心读数 */
 .m3e-metric {
   display: flex;
   align-items: baseline;
-  gap: 5px;
-  margin-bottom: 4px;
+  gap: 4px;
+  margin-bottom: 2px;
 }
 
 .m3e-metric-val {
-  font-size: 34px;
+  font-size: 32px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -1px;
-  transition: color 0.3s ease, text-shadow 0.3s ease;
-}
-
-.m3e-metric-val.pulse {
-  color: var(--m3e-primary);
-  text-shadow: 0 0 14px var(--m3e-primary);
+  letter-spacing: -0.8px;
+  color: var(--m3e-text-main);
 }
 
 .m3e-metric-unit {
-  font-size: 15px;
+  font-size: 14px;
   color: var(--m3e-text-muted);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .m3e-card-sub {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--m3e-text-sub);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* 卡片内分色阶块 (DashboardBlock) */
+/* 前台应用聚焦卡 */
+.m3e-focus-box {
+  background: var(--m3e-surface-block);
+  border-radius: var(--radius-block);
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+
+.m3e-focus-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+
+.m3e-focus-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--m3e-text-muted);
+}
+
+.m3e-app-friendly {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--m3e-text-main);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.m3e-pkg-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.m3e-pkg-code {
+  flex: 1;
+  font-size: 11.5px;
+  color: var(--m3e-secondary);
+  background: rgba(0, 0, 0, 0.22);
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.m3e-btn-icon-subtle {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--m3e-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.m3e-btn-icon-subtle:active {
+  background: var(--m3e-primary-container);
+  color: var(--m3e-primary);
+}
+
+/* 卡片内部普通块 */
 .m3e-block {
   background: var(--m3e-surface-block);
   border-radius: var(--radius-block);
-  padding: 14px 16px;
+  padding: 12px 14px;
 }
 
 .m3e-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 9px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  gap: 10px;
 }
 .m3e-row:last-child { border-bottom: none; }
 
 .m3e-row-label {
-  color: var(--m3e-text-muted);
+  color: var(--m3e-text-main);
   font-size: 13px;
-  flex: 1;
+  font-weight: 500;
 }
 
 .m3e-row-value {
   font-weight: 600;
-  font-size: 13px;
+  font-size: 12.5px;
   text-align: right;
   flex-shrink: 0;
 }
 .m3e-row-value.highlight { color: var(--m3e-primary); }
 .m3e-row-value.ok-text { color: var(--m3e-ok); }
+.m3e-row-value.warn-text { color: var(--m3e-warn); }
 
-/* SVG 动态曲线图 */
+/* 温度趋势图 (平坦极简，无荧光滤镜) */
 .m3e-chart-container {
   height: 96px;
   background: var(--m3e-surface-block);
   border-radius: var(--radius-block);
-  padding: 8px 10px;
-  display: flex;
-  align-items: center;
+  padding: 6px 8px;
+  position: relative;
+  overflow: hidden;
 }
 
-.m3e-chart {
+.m3e-canvas-chart {
   width: 100%;
   height: 100%;
+  display: block;
 }
 
-.m3e-chart-line {
-  fill: none;
-  stroke: var(--m3e-primary);
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  transition: d 0.35s ease;
-  filter: drop-shadow(0 2px 6px rgba(168, 199, 250, 0.4));
+.m3e-legend-val {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--m3e-primary);
 }
 
-.m3e-chart-area {
-  fill: var(--m3e-primary);
-  opacity: 0.18;
-  transition: d 0.35s ease;
-}
-
-/* 进度条与频率 */
+/* CPU 负载条 */
 .m3e-bar-row {
-  margin-bottom: 12px;
+  margin-bottom: 9px;
 }
 .m3e-bar-row:last-child { margin-bottom: 0; }
 
 .m3e-bar-info {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
-  margin-bottom: 5px;
+  align-items: baseline;
+  font-size: 11.5px;
+  margin-bottom: 4px;
 }
 
+.m3e-bar-name { color: var(--m3e-text-muted); }
+.m3e-bar-val { color: var(--m3e-text-main); font-weight: 600; }
+
 .m3e-progress {
-  height: 7px;
+  height: 5px;
   background: rgba(255, 255, 255, 0.06);
   border-radius: var(--radius-pill);
   overflow: hidden;
@@ -399,12 +455,105 @@ body {
 
 .m3e-progress-bar {
   height: 100%;
-  background: var(--m3e-primary);
   border-radius: var(--radius-pill);
-  transition: width 0.4s var(--m3e-spring);
+  transition: width 0.35s ease;
 }
 
-/* 滑块控制区 */
+.m3e-progress-bar.bar-x4 { background: var(--m3e-primary); }
+.m3e-progress-bar.bar-a720 { background: var(--m3e-ok); }
+.m3e-progress-bar.bar-a720-low { background: #5eead4; }
+.m3e-progress-bar.bar-a520 { background: #93c5fd; }
+
+/* 方案网格选择器 (无描边、无阴影) */
+.m3e-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.m3e-profile-pill {
+  border: none;
+  background: var(--m3e-surface-block);
+  border-radius: 12px;
+  padding: 9px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  color: var(--m3e-text-muted);
+  outline: none;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.m3e-profile-pill:active { transform: scale(0.96); }
+
+.m3e-profile-pill.active {
+  background: var(--m3e-primary);
+  color: var(--m3e-on-primary);
+}
+
+.m3e-pill-title {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.m3e-pill-temp {
+  font-size: 11px;
+  font-family: "JetBrains Mono", Consolas, monospace;
+}
+
+/* 充电 3x2 网格 (无描边、无阴影) */
+.m3e-watt-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.m3e-watt-card {
+  border: none;
+  background: var(--m3e-surface-block);
+  border-radius: 10px;
+  padding: 10px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--m3e-text-main);
+  outline: none;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.m3e-watt-card:active { transform: scale(0.96); }
+
+.m3e-watt-card.active {
+  background: var(--m3e-primary);
+  color: var(--m3e-on-primary);
+}
+
+.m3e-watt-num {
+  font-size: 15px;
+  font-weight: 700;
+  font-family: "JetBrains Mono", Consolas, monospace;
+}
+
+.m3e-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 14px 0 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--m3e-text-muted);
+}
+
+/* 滑块组件 */
+.m3e-slider-wrap { width: 100%; }
+
 .m3e-slider-header {
   display: flex;
   justify-content: space-between;
@@ -412,135 +561,141 @@ body {
   margin-bottom: 8px;
 }
 
+.m3e-slider-badge {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--m3e-surface-card);
+  color: var(--m3e-text-main);
+}
+.m3e-slider-badge.highlight { color: var(--m3e-primary); }
+
+.m3e-range-track-container {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+
 .m3e-slider {
   -webkit-appearance: none;
   width: 100%;
-  height: 10px;
+  height: 8px;
   border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.08);
   outline: none;
   cursor: pointer;
-  transition: all 0.2s ease;
 }
 
 .m3e-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: var(--m3e-primary);
   cursor: pointer;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
-  transition: transform 0.22s var(--m3e-spring);
+  border: 2px solid var(--m3e-surface-card);
 }
 
-.m3e-slider::-webkit-slider-thumb:active {
-  transform: scale(1.22);
+.m3e-slider-bubble {
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%) scale(0.85);
+  background: var(--m3e-primary);
+  color: var(--m3e-on-primary);
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
-/* 开关行与防压缩布局 (修复核心) */
+.m3e-slider-bubble.visible {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+.m3e-slider-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--m3e-text-sub);
+  margin-top: 6px;
+  padding: 0 4px;
+}
+
+/* 开关行 (无任何描边与外阴影) */
 .m3e-switch-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 12px;
 }
 
-.m3e-switch-info {
-  flex: 1 1 auto;
-  min-width: 0;
-  word-break: break-word;
-}
+.m3e-switch-info { flex: 1 1 auto; min-width: 0; }
+.m3e-switch-title { font-size: 13.5px; font-weight: 600; color: var(--m3e-text-main); }
+.m3e-switch-desc { font-size: 11.5px; color: var(--m3e-text-muted); margin-top: 2px; line-height: 1.4; }
 
-.m3e-switch-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--m3e-text-main);
-}
-
-.m3e-switch-desc {
-  font-size: 12px;
-  color: var(--m3e-text-muted);
-  margin-top: 2px;
-  line-height: 1.4;
-}
-
-.m3e-switch-wrapper {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-}
-
+.m3e-switch-wrapper { flex: 0 0 48px; }
 .m3e-switch {
   position: relative;
   display: inline-block;
-  width: 52px;
-  min-width: 52px;
-  height: 32px;
-  min-height: 32px;
-  flex: 0 0 52px; /* 强制锁定固定宽度，彻底避免 flex 挤压变形 */
+  width: 48px;
+  height: 28px;
 }
-
-.m3e-switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
+.m3e-switch input { opacity: 0; width: 0; height: 0; }
 
 .m3e-slider-pill {
   position: absolute;
   cursor: pointer;
   inset: 0;
   background-color: var(--m3e-surface-card);
-  border: 1.5px solid var(--m3e-surface-border);
-  transition: all 0.3s var(--m3e-spring);
   border-radius: var(--radius-pill);
+  transition: background-color 0.25s ease;
 }
 
 .m3e-slider-pill:before {
   position: absolute;
   content: "";
-  height: 22px;
-  width: 22px;
+  height: 20px;
+  width: 20px;
   left: 4px;
-  bottom: 3.5px;
+  bottom: 4px;
   background-color: var(--m3e-text-muted);
-  transition: all 0.3s var(--m3e-spring);
   border-radius: 50%;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  transition: transform 0.25s var(--m3e-spring);
 }
 
 input:checked + .m3e-slider-pill {
   background-color: var(--m3e-primary);
-  border-color: var(--m3e-primary);
 }
 
 input:checked + .m3e-slider-pill:before {
   transform: translateX(20px);
   background-color: var(--m3e-on-primary);
-  width: 24px;
-  height: 24px;
-  left: 3px;
-  bottom: 2.5px;
 }
 
-/* 按钮与交互动画 */
+/* 按钮 (无投影、纯平坦色块) */
 .m3e-action-btn {
   width: 100%;
-  padding: 13px 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 18px;
   border-radius: var(--radius-pill);
-  font-size: 14.5px;
+  font-size: 13.5px;
   font-weight: 700;
   border: none;
   cursor: pointer;
-  transition: all 0.22s var(--m3e-spring);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  outline: none;
+  transition: opacity 0.2s ease, transform 0.15s ease;
 }
-
-.m3e-action-btn:active {
-  transform: scale(0.95);
-}
+.m3e-action-btn:active { transform: scale(0.97); }
 
 .m3e-action-btn.primary {
   background: var(--m3e-primary);
@@ -550,7 +705,6 @@ input:checked + .m3e-slider-pill:before {
 .m3e-action-btn.secondary {
   background: var(--m3e-surface-block);
   color: var(--m3e-text-main);
-  border: 1px solid var(--m3e-surface-border);
 }
 
 .m3e-action-btn.danger {
@@ -560,65 +714,242 @@ input:checked + .m3e-slider-pill:before {
 
 .m3e-btn-icon {
   background: var(--m3e-surface-block);
-  border: 1px solid var(--m3e-surface-border);
+  border: none;
   border-radius: 50%;
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: transform 0.25s var(--m3e-spring);
+  color: var(--m3e-text-muted);
 }
-.m3e-btn-icon:active { transform: rotate(180deg) scale(0.9); }
+.m3e-btn-icon:active { color: var(--m3e-primary); }
 
-/* Scene 游戏药丸云 */
+/* ========================================================
+   自定义游戏列表与搜索交互组件 (纯净原生 Android 质感)
+   ======================================================== */
+.m3e-search-container {
+  position: relative;
+  width: 100%;
+}
+
+.m3e-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--m3e-surface-block);
+  border-radius: 12px;
+  padding: 4px 6px 4px 12px;
+}
+
+.m3e-search-icon {
+  color: var(--m3e-text-sub);
+  flex-shrink: 0;
+}
+
+.m3e-search-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--m3e-text-main);
+  font-size: 13px;
+  padding: 6px 0;
+}
+.m3e-search-input::placeholder {
+  color: var(--m3e-text-sub);
+  font-size: 12px;
+}
+
+.m3e-btn-add {
+  flex-shrink: 0;
+  background: var(--m3e-primary);
+  color: var(--m3e-on-primary);
+  border: none;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+.m3e-btn-add:active { opacity: 0.8; }
+
+.m3e-search-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--m3e-surface-block);
+  border-radius: 12px;
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 100;
+  display: none;
+}
+.m3e-search-dropdown.show { display: block; }
+
+.m3e-search-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+}
+.m3e-search-item:last-child { border-bottom: none; }
+.m3e-search-item:hover, .m3e-search-item:active {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.m3e-search-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.m3e-search-item-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--m3e-text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.m3e-search-item-pkg {
+  font-size: 11px;
+  color: var(--m3e-text-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.m3e-btn-tag {
+  flex-shrink: 0;
+  background: var(--m3e-primary-container);
+  color: var(--m3e-on-primary-container);
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-left: 8px;
+}
+
+/* 自定义游戏已添加列表 */
+.m3e-game-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.m3e-game-item {
+  background: var(--m3e-surface-block);
+  border-radius: 12px;
+  padding: 9px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.m3e-game-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.m3e-game-item-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--m3e-text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.m3e-game-item-pkg {
+  font-size: 11px;
+  color: var(--m3e-text-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.m3e-btn-remove {
+  background: transparent;
+  color: var(--m3e-danger);
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.m3e-btn-remove:active {
+  background: var(--m3e-danger-container);
+}
+
+.m3e-empty-hint {
+  padding: 16px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--m3e-text-sub);
+}
+
+/* Scene 游戏药丸 */
 .m3e-chips-cloud {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
+  gap: 6px;
 }
 
-/* 终端日志 */
+/* 控制台日志卡片 (去描边) */
 .m3e-terminal {
-  background: #09090c;
+  background: #08090d;
   border-radius: var(--radius-block);
-  padding: 14px;
+  padding: 12px;
   font-family: "JetBrains Mono", Consolas, monospace;
-  font-size: 11.5px;
+  font-size: 11px;
   line-height: 1.5;
-  color: var(--m3e-ok);
-  height: 240px;
+  color: #7ef2b6;
+  height: 220px;
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-all;
-  border: 1px solid var(--m3e-surface-border);
 }
 
-/* 选项卡切换 M3E 入场动效 */
-.m3e-tab-content {
-  display: none;
-  opacity: 0;
+/* 页面切换动画 */
+.m3e-tab-content { display: none; opacity: 0; }
+.m3e-tab-content.active { display: block; opacity: 1; }
+
+.m3e-tab-content.slide-left {
+  animation: m3eTabSlideLeft 0.28s var(--m3e-spring) forwards;
 }
 
-.m3e-tab-content.active {
-  display: block;
-  animation: m3eTabEnter 0.32s var(--m3e-spring) forwards;
+.m3e-tab-content.slide-right {
+  animation: m3eTabSlideRight 0.28s var(--m3e-spring) forwards;
 }
 
-@keyframes m3eTabEnter {
-  from {
-    opacity: 0;
-    transform: translateY(14px) scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+@keyframes m3eTabSlideLeft {
+  from { opacity: 0; transform: translateX(14px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
-/* 浮动 Toast 弹窗 (Snackbar) */
+@keyframes m3eTabSlideRight {
+  from { opacity: 0; transform: translateX(-14px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Toast 提示 (纯净悬浮条) */
 .m3e-snackbar {
   position: fixed;
   bottom: 24px;
@@ -626,16 +957,16 @@ input:checked + .m3e-slider-pill:before {
   transform: translateX(-50%) translateY(80px);
   background: var(--m3e-primary);
   color: var(--m3e-on-primary);
-  padding: 11px 24px;
+  padding: 9px 20px;
   border-radius: var(--radius-pill);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 700;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   opacity: 0;
   pointer-events: none;
-  transition: all 0.32s var(--m3e-spring);
+  transition: all 0.3s var(--m3e-spring);
   z-index: 999;
   white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
 }
 
 .m3e-snackbar.show {
@@ -645,25 +976,17 @@ input:checked + .m3e-slider-pill:before {
 
 .m3e-footer {
   text-align: center;
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--m3e-text-sub);
-  margin-top: 26px;
+  margin-top: 24px;
 }
 
-/* 移动端水平自适应与紧凑屏适配 */
+/* 移动端微调 */
 @media (max-width: 480px) {
-  .m3e-shell {
-    padding: 12px 12px 36px;
-  }
-  .m3e-card {
-    padding: 16px;
-    border-radius: 20px;
-  }
-  .m3e-metric-val {
-    font-size: 28px;
-  }
-  .m3e-connected-btn {
-    padding: 8px 11px;
-    font-size: 12px;
-  }
+  .m3e-shell { padding: 10px 10px 36px; }
+  .m3e-card { padding: 14px; border-radius: 14px; }
+  .m3e-metric-val { font-size: 28px; }
+  .m3e-connected-btn { padding: 8px 1px; font-size: 12px; }
+  .m3e-profile-pill { padding: 8px 4px; }
+  .m3e-pill-title { font-size: 11.5px; }
 }

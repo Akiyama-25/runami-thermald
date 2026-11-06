@@ -25,10 +25,40 @@ else
 fi
 
 # 检查内核 xm_power 充电控制支持
-if [ -d "/sys/class/xm_power/charger/charger_thermal" ]; then
-    ui_print "  [√] 检测到底层 xm_power 澎湃秒充硬件控制节点！"
+find_xm_charger() {
+    for p in \
+        "/sys/class/xm_power/charger/charger_thermal" \
+        "/sys/class/xm_power/charger_thermal" \
+        "/sys/class/xm_power/charge_interface" \
+        "/sys/class/xm_power/charger/charge_interface" \
+        "/sys/class/xm_power" \
+        "/sys/class/power_supply/battery" \
+        "/sys/class/qcom-battery"; do
+        if [ -f "$p/wired_thermal_remove" ] || [ -f "$p/wired_ctrl_limit" ]; then
+            echo "$p"
+            return 0
+        fi
+    done
+    if [ -d "/sys/class/xm_power/charger/charger_thermal" ]; then
+        echo "/sys/class/xm_power/charger/charger_thermal"
+        return 0
+    fi
+    if [ -d "/sys/class/xm_power" ]; then
+        echo "/sys/class/xm_power"
+        return 0
+    fi
+    return 1
+}
+
+XM_NODE=$(find_xm_charger 2>/dev/null)
+if [ -n "$XM_NODE" ]; then
+    ui_print "  [√] 检测到 xm_power 硬件充电控制节点: $XM_NODE"
+elif [ -d "/sys/class/xm_power" ]; then
+    ui_print "  [√] 检测到系统已挂载 xm_power 子系统！"
+elif [ "$DEVICE" = "houji" ] || [ "$(getprop ro.product.manufacturer 2>/dev/null | tr '[:upper:]' '[:lower:]')" = "xiaomi" ]; then
+    ui_print "  [i] 小米/红米平台环境已确认，xm_power 节点将在系统完整开机加载驱动后由守护进程自动接入。"
 else
-    ui_print "  [!] 未检测到 xm_power 硬件节点，充电功率控制将以标准 sysfs 回退模式运行。"
+    ui_print "  [i] 未检测到专用 xm_power 节点，将以标准温控调度模式运行。"
 fi
 
 # 检查 Scene 游戏配置

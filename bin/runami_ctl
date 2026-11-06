@@ -8,7 +8,33 @@ DATADIR="/data/adb/runami_thermald"
 CONFIG_FILE="${DATADIR}/config.json"
 DEFAULT_CONFIG="${MODDIR}/config/runami.conf"
 PID_FILE="${DATADIR}/runami_daemon.pid"
-XM_CHARGER="/sys/class/xm_power/charger/charger_thermal"
+
+find_xm_charger() {
+    for p in \
+        "/sys/class/xm_power/charger/charger_thermal" \
+        "/sys/class/xm_power/charger_thermal" \
+        "/sys/class/xm_power/charge_interface" \
+        "/sys/class/xm_power/charger/charge_interface" \
+        "/sys/class/xm_power" \
+        "/sys/class/power_supply/battery" \
+        "/sys/class/qcom-battery"; do
+        if [ -f "$p/wired_thermal_remove" ] || [ -f "$p/wired_ctrl_limit" ]; then
+            echo "$p"
+            return 0
+        fi
+    done
+    if [ -d "/sys/class/xm_power/charger/charger_thermal" ]; then
+        echo "/sys/class/xm_power/charger/charger_thermal"
+        return 0
+    fi
+    if [ -d "/sys/class/xm_power" ]; then
+        echo "/sys/class/xm_power"
+        return 0
+    fi
+    return 1
+}
+
+XM_CHARGER=$(find_xm_charger 2>/dev/null || echo "/sys/class/xm_power/charger/charger_thermal")
 
 ensure_dirs() {
     mkdir -p "${DATADIR}"
@@ -133,12 +159,30 @@ case "$1" in
             fi
         done
         if [ "$found" -eq 0 ]; then
-            echo "  (未找到 Scene games.xml，正在使用内置电竞游戏列表)"
-            echo "  - com.miHoYo.Yuanshen"
-            echo "  - com.miHoYo.hkrpg"
-            echo "  - com.miHoYo.Nap"
-            echo "  - com.tencent.tmgp.sgame"
-            echo "  - com.tencent.tmgp.pubgmhd"
+            echo "  (未找到 Scene games.xml)"
+        fi
+        ;;
+    custom-games)
+        echo "=== 自定义游戏列表 (高优先级) ==="
+        local cfg="${CONFIG_FILE}"
+        if [ ! -f "$cfg" ]; then cfg="${DEFAULT_CONFIG}"; fi
+        awk '/"custom_games"/, /]/' "$cfg" 2>/dev/null | grep -o '"[a-zA-Z0-9_.]\+"' | grep '\.' | tr -d '"' | while read -r pkg; do
+            echo "  - $pkg"
+        done
+        ;;
+    list-user-apps)
+        # 仅搜索用户空间应用 (-3)
+        if command -v pm >/dev/null 2>&1; then
+            pm list packages -3 2>/dev/null | sed -e 's/^package://' | sort
+        elif command -v cmd >/dev/null 2>&1; then
+            cmd package list packages -3 2>/dev/null | sed -e 's/^package://' | sort
+        else
+            echo "com.miHoYo.Yuanshen"
+            echo "com.miHoYo.hkrpg"
+            echo "com.miHoYo.Nap"
+            echo "com.tencent.tmgp.sgame"
+            echo "com.tencent.tmgp.pubgmhd"
+            echo "com.hypergryph.arknights"
         fi
         ;;
     diagnose)

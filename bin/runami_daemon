@@ -16,6 +16,33 @@ XM_CHARGER="/sys/class/xm_power/charger/charger_thermal"
 BATT_DIR="/sys/class/power_supply/battery"
 THERMAL_MSG="/sys/class/thermal/thermal_message"
 
+find_xm_charger() {
+    for p in \
+        "/sys/class/xm_power/charger/charger_thermal" \
+        "/sys/class/xm_power/charger_thermal" \
+        "/sys/class/xm_power/charge_interface" \
+        "/sys/class/xm_power/charger/charge_interface" \
+        "/sys/class/xm_power" \
+        "/sys/class/power_supply/battery" \
+        "/sys/class/qcom-battery"; do
+        if [ -f "$p/wired_thermal_remove" ] || [ -f "$p/wired_ctrl_limit" ]; then
+            echo "$p"
+            return 0
+        fi
+    done
+    if [ -d "/sys/class/xm_power/charger/charger_thermal" ]; then
+        echo "/sys/class/xm_power/charger/charger_thermal"
+        return 0
+    fi
+    if [ -d "/sys/class/xm_power" ]; then
+        echo "/sys/class/xm_power"
+        return 0
+    fi
+    return 1
+}
+
+XM_CHARGER=$(find_xm_charger 2>/dev/null || echo "/sys/class/xm_power/charger/charger_thermal")
+
 mkdir -p "${DATADIR}"
 mkdir -p "${DATADIR}/templates"
 mkdir -p "${OVERRIDE_DIR}"
@@ -50,6 +77,11 @@ load_config() {
     WALL_CHARGE=${WALL_CHARGE:-44}
     WALL_OFF_CHG=${WALL_OFF_CHG:-45}
     TARGET_W=${TARGET_W:-45}
+
+    CUSTOM_GAMES=$(awk '/"custom_games"/, /]/' "${CONFIG_FILE}" 2>/dev/null | grep -o '"[a-zA-Z0-9_.]\+"' | grep '\.' | tr -d '"' | tr '\n' ' ')
+    if [ -z "$CUSTOM_GAMES" ]; then
+        CUSTOM_GAMES="com.miHoYo.Yuanshen com.miHoYo.hkrpg com.miHoYo.Nap com.tencent.tmgp.sgame com.tencent.tmgp.pubgmhd"
+    fi
 }
 
 # 7-NTC 传感矩阵读取与加权板温合成 (带多层 fallback)
@@ -120,18 +152,63 @@ read_sensors() {
     fi
 }
 
+is_ignored_app() {
+    case "$1" in
+        com.miui.home|com.android.launcher*|com.mi.android.globallauncher|com.android.systemui)
+            return 0
+            ;;
+        *inputmethod*|*ime*|*.keyboard*|*.input*|com.baidu.input*|com.sohu.inputmethod*|com.tencent.qqpinyin*|com.touchtype.swiftkey)
+            return 0
+            ;;
+        com.google.android.inputmethod.latin)
+            return 0
+            ;;
+        com.miui.securityadd|com.miui.securitycenter*|com.xiaomi.misettings)
+            return 0
+            ;;
+        android|system|com.google.android.gms*|io.github.a13e300.ksu|me.bmax.apatch)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 get_top_app() {
     local top_pkg=""
+
+    # 策略 1: 优先获取系统当前获焦与恢复态前台活动窗口
+    if command -v dumpsys >/dev/null 2>&1; then
+        local focus_str=$(dumpsys window 2>/dev/null | grep -E "mCurrentFocus|mFocusedApp" | head -n2)
+        if [ -n "$focus_str" ]; then
+            local cand=$(echo "$focus_str" | grep -oE "[a-zA-Z0-9._]+/[a-zA-Z0-9._]+" | head -n1 | cut -d'/' -f1)
+            if [ -n "$cand" ] && ! is_ignored_app "$cand"; then
+                echo "$cand"
+                return
+            fi
+        fi
+        local resume_str=$(dumpsys activity activities 2>/dev/null | grep -E "topResumedActivity|mResumedActivity" | head -n2)
+        if [ -n "$resume_str" ]; then
+            local cand=$(echo "$resume_str" | grep -oE "[a-zA-Z0-9._]+/[a-zA-Z0-9._]+" | head -n1 | cut -d'/' -f1)
+            if [ -n "$cand" ] && ! is_ignored_app "$cand"; then
+                echo "$cand"
+                return
+            fi
+        fi
+    fi
+
+    # 策略 2: 降级回退至 /dev/cpuset/top-app 进程池深度过滤扫描
     for p in /dev/cpuset/top-app/cgroup.procs /dev/cpuset/top-app/tasks; do
         if [ -f "$p" ]; then
-            for pid in $(head -n 25 "$p" 2>/dev/null); do
+            for pid in $(cat "$p" 2>/dev/null); do
                 if [ -d "/proc/$pid" ]; then
                     local cmd=$(tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null | head -n1)
-                    if [ -n "$cmd" ] && [ "$cmd" != "com.miui.home" ] && [ "$cmd" != "com.android.systemui" ] && [ "$cmd" != "com.android.launcher" ] && [ "$cmd" != "com.mi.android.globallauncher" ]; then
+                    if [ -n "$cmd" ] && ! is_ignored_app "$cmd"; then
                         case "$cmd" in
                             *.*)
-                                top_pkg="$cmd"
-                                break 2
+                                echo "$cmd"
+                                return
                                 ;;
                         esac
                     fi
@@ -139,7 +216,8 @@ get_top_app() {
             done
         fi
     done
-    echo "$top_pkg"
+
+    echo ""
 }
 
 get_scene_games() {
@@ -158,11 +236,21 @@ is_game_app() {
     if [ -z "$pkg" ]; then
         return 1
     fi
-    for g in $SCENE_GAMES com.miHoYo.Yuanshen com.miHoYo.hkrpg com.miHoYo.Nap com.tencent.tmgp.sgame com.tencent.tmgp.pubgmhd com.hypergryph.arknights; do
+    # 1. 优先匹配用户自定义游戏列表 (优先级最高)
+    for g in $CUSTOM_GAMES; do
         if [ "$pkg" = "$g" ]; then
+            GAME_SOURCE="custom"
             return 0
         fi
     done
+    # 2. 其次匹配 Scene 游戏列表
+    for g in $SCENE_GAMES com.hypergryph.arknights; do
+        if [ "$pkg" = "$g" ]; then
+            GAME_SOURCE="scene"
+            return 0
+        fi
+    done
+    GAME_SOURCE=""
     return 1
 }
 
@@ -182,7 +270,12 @@ enforce_cores_online() {
 regulate_charging() {
     local target_w="$1"
     if [ ! -d "${XM_CHARGER}" ]; then
-        return
+        local detected=$(find_xm_charger 2>/dev/null)
+        if [ -n "$detected" ]; then
+            XM_CHARGER="$detected"
+        else
+            return
+        fi
     fi
 
     if [ "$IS_CHARGING" -eq 1 ]; then
@@ -217,6 +310,13 @@ dump_status_json() {
     local is_g="false"
     if is_game_app "$top"; then
         is_g="true"
+    fi
+
+    if [ ! -d "${XM_CHARGER}" ]; then
+        local detected=$(find_xm_charger 2>/dev/null)
+        if [ -n "$detected" ]; then
+            XM_CHARGER="$detected"
+        fi
     fi
 
     local xm_gear=$(cat "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null || echo 12)
@@ -263,7 +363,9 @@ dump_status_json() {
     "policy7": $((f7 / 1000)),
     "gpu": $((gpu_clk / 1000000))
   },
-  "sceneGamesCount": $(echo "$SCENE_GAMES" | wc -w)
+  "customGamesCount": $(echo "$CUSTOM_GAMES" | wc -w),
+  "sceneGamesCount": $(echo "$SCENE_GAMES" | wc -w),
+  "gameSource": "${GAME_SOURCE:-}"
 }
 EOF
 }
