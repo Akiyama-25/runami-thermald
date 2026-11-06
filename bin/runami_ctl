@@ -69,7 +69,10 @@ show_help() {
     echo "  games             列出当前 Scene 联动识别到的游戏列表"
     echo "  diagnose          全面诊断系统温控节点与 xm_power 状态"
     echo "  restore           清除覆盖并彻底交回官方原厂温控"
-    echo "  log               查看最近运行日志"
+    echo "  log [N]           查看最近运行日志 (默认 100 行)"
+    echo "  log-full          输出全部运行日志"
+    echo "  export-log        导出完整日志到 /sdcard/Download/"
+    echo "  clear-log         清空当前运行日志"
 }
 
 ensure_dirs
@@ -90,7 +93,12 @@ case "$1" in
     restart)
         "$DAEMON" --stop
         sleep 1
+        rm -f "${DATADIR}/runami.log"* 2>/dev/null
         "$DAEMON" --start
+        ;;
+    clear-log)
+        rm -f "${DATADIR}/runami.log"* 2>/dev/null
+        echo "SUCCESS: Log cleared"
         ;;
     get-config)
         if [ -f "${CONFIG_FILE}" ]; then
@@ -210,13 +218,59 @@ case "$1" in
         echo "官方原厂温控已完全恢复！"
         ;;
     log)
+        local lines="${2:-100}"
         for log_path in "/data/adb/runami_thermald/runami.log" "${DATADIR}/runami.log"; do
             if [ -f "$log_path" ]; then
-                tail -n 80 "$log_path"
+                tail -n "$lines" "$log_path"
                 exit 0
             fi
         done
         echo "[$(date '+%m-%d %H:%M:%S')] Runami Thermald 已启动，暂无异常日志。"
+        ;;
+    log-full)
+        for log_path in "/data/adb/runami_thermald/runami.log" "${DATADIR}/runami.log"; do
+            if [ -f "$log_path" ]; then
+                cat "$log_path"
+                exit 0
+            fi
+        done
+        echo "[$(date '+%m-%d %H:%M:%S')] 暂无运行日志记录。"
+        ;;
+    export-log)
+        local src=""
+        for lp in "/data/adb/runami_thermald/runami.log" "${DATADIR}/runami.log"; do
+            if [ -f "$lp" ]; then
+                src="$lp"
+                break
+            fi
+        done
+        if [ -z "$src" ]; then
+            echo "ERROR: Log file not found"
+            exit 1
+        fi
+
+        local out_dir=""
+        for d in "/sdcard/Download" "/storage/emulated/0/Download" "/sdcard" "/storage/emulated/0" "${DATADIR}"; do
+            if [ -d "$d" ] && [ -w "$d" ]; then
+                out_dir="$d"
+                break
+            fi
+        done
+        if [ -z "$out_dir" ]; then
+            out_dir="/sdcard/Download"
+            mkdir -p "$out_dir" 2>/dev/null
+        fi
+
+        local out_file="${out_dir}/runami_thermald_$(date '+%Y%m%d_%H%M%S').log"
+        if cp -f "$src" "$out_file" 2>/dev/null; then
+            chmod 666 "$out_file" 2>/dev/null
+            echo "$out_file"
+        else
+            out_file="${DATADIR}/runami_export.log"
+            cp -f "$src" "$out_file" 2>/dev/null
+            chmod 666 "$out_file" 2>/dev/null
+            echo "$out_file"
+        fi
         ;;
     *)
         show_help

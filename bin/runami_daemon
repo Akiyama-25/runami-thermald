@@ -51,12 +51,6 @@ log() {
     local msg="[$(date '+%m-%d %H:%M:%S')] $1"
     echo "$msg"
     echo "$msg" >> "${LOG_FILE}" 2>/dev/null
-    if [ -f "${LOG_FILE}" ]; then
-        local size=$(wc -c < "${LOG_FILE}" 2>/dev/null || echo 0)
-        if [ "$size" -gt 1048576 ]; then
-            mv "${LOG_FILE}" "${LOG_FILE}.1"
-        fi
-    fi
 }
 
 load_config() {
@@ -81,6 +75,78 @@ load_config() {
     CUSTOM_GAMES=$(awk '/"custom_games"/, /]/' "${CONFIG_FILE}" 2>/dev/null | grep -o '"[a-zA-Z0-9_.]\+"' | grep '\.' | tr -d '"' | tr '\n' ' ')
     WALL_OFF_IDLE=$(grep -A 8 '"screen_off_idle"' "${CONFIG_FILE}" 2>/dev/null | grep '"thermal_wall"' | grep -o '[0-9]*' | head -n1)
     WALL_OFF_IDLE=${WALL_OFF_IDLE:-42}
+}
+
+# 屏幕点亮/熄屏状态多源权威探测 (解决 HyperOS / Android 熄屏识别失效问题)
+check_screen_on() {
+    # 1. 尝试从 thermal_message 驱动节点直接读取
+    for sf in "${THERMAL_MSG}/screen_state" "/sys/class/thermal/thermal_message/screen_state"; do
+        if [ -r "$sf" ]; then
+            local raw=$(cat "$sf" 2>/dev/null)
+            if [ "$raw" = "0" ]; then
+                echo 0
+                return
+            elif [ "$raw" = "1" ]; then
+                echo 1
+                return
+            fi
+        fi
+    done
+
+    # 2. Android Framework 权威电源状态检测 (dumpsys power 前 35 行极速截取)
+    if command -v dumpsys >/dev/null 2>&1; then
+        local pwr=$(dumpsys power 2>/dev/null | head -n 35)
+        if [ -n "$pwr" ]; then
+            local wake=$(echo "$pwr" | grep -m1 "mWakefulness=" | cut -d'=' -f2 | tr -d '\r\n ')
+            if [ -n "$wake" ]; then
+                case "$wake" in
+                    Awake)
+                        echo 1
+                        return
+                        ;;
+                    Asleep|Dozing|Dreaming)
+                        echo 0
+                        return
+                        ;;
+                esac
+            fi
+
+            if echo "$pwr" | grep -qE "mIsInteractive[:=][[:space:]]*false|mInteractive[:=][[:space:]]*false"; then
+                echo 0
+                return
+            fi
+            if echo "$pwr" | grep -qE "mIsInteractive[:=][[:space:]]*true|mInteractive[:=][[:space:]]*true"; then
+                echo 1
+                return
+            fi
+        fi
+
+        # 3. 备选检测: dumpsys display 状态
+        local d_state=$(dumpsys display 2>/dev/null | grep -m1 -E "mState=OFF|mActualDisplayState=OFF|mState=ON|mActualDisplayState=ON")
+        if [ -n "$d_state" ]; then
+            if echo "$d_state" | grep -qi "OFF"; then
+                echo 0
+                return
+            else
+                echo 1
+                return
+            fi
+        fi
+    fi
+
+    # 4. 备选检查: 背光亮度是否为 0
+    for bl in /sys/class/backlight/*/brightness; do
+        if [ -r "$bl" ]; then
+            local bv=$(cat "$bl" 2>/dev/null || echo -1)
+            if [ "$bv" = "0" ]; then
+                echo 0
+                return
+            fi
+        fi
+    done
+
+    # 5. 默认兜底为亮屏 (1)
+    echo 1
 }
 
 # 7-NTC 传感矩阵读取与加权板温合成 (带多层 fallback)
@@ -143,12 +209,7 @@ read_sensors() {
         IS_CHARGING=0
     fi
 
-    local screen_raw=$(cat "${THERMAL_MSG}/screen_state" 2>/dev/null || echo 1)
-    if [ "$screen_raw" = "0" ]; then
-        SCREEN_ON=0
-    else
-        SCREEN_ON=1
-    fi
+    SCREEN_ON=$(check_screen_on)
 }
 
 is_ignored_app() {
@@ -403,6 +464,9 @@ main_daemon_loop() {
     trap "load_config; log '配置已热重载'" HUP USR1
 
     local game_hold=0
+    local last_top=""
+    local last_screen_on=""
+    local last_is_charging=""
     local last_profile=""
     local last_state_save=0
 
@@ -411,7 +475,48 @@ main_daemon_loop() {
         get_scene_games
         local top=$(get_top_app)
 
-        if is_game_app "$top"; then
+        # 1. 详细记录前台应用切换
+        if [ "$top" != "$last_top" ]; then
+            if [ -n "$top" ]; then
+                if is_game_app "$top"; then
+                    log "[前台应用] 切换至: $top (电竞游戏, 来源: ${GAME_SOURCE:-自定义})"
+                else
+                    log "[前台应用] 切换至: $top"
+                fi
+            else
+                log "[前台应用] 退回系统桌面或待机"
+            fi
+            last_top="$top"
+        fi
+
+        # 2. 详细记录屏幕状态变化
+        if [ -n "$last_screen_on" ] && [ "$SCREEN_ON" != "$last_screen_on" ]; then
+            if [ "$SCREEN_ON" -eq 1 ]; then
+                log "[屏幕状态] 屏幕点亮 (亮屏)"
+            else
+                log "[屏幕状态] 屏幕关闭 (熄屏/休眠/AOD)"
+            fi
+        elif [ -z "$last_screen_on" ]; then
+            log "[屏幕状态] 初始检测: $([ "$SCREEN_ON" -eq 1 ] && echo "亮屏" || echo "熄屏")"
+        fi
+        last_screen_on="$SCREEN_ON"
+
+        # 3. 详细记录充电状态变化
+        if [ -n "$last_is_charging" ] && [ "$IS_CHARGING" != "$last_is_charging" ]; then
+            if [ "$IS_CHARGING" -eq 1 ]; then
+                log "[充电状态] 充电器接入 (状态: ${BATT_STATUS}, 功率: ${BATT_WATTS}W)"
+            else
+                log "[充电状态] 充电器断开 (电池状态: ${BATT_STATUS})"
+            fi
+        fi
+        last_is_charging="$IS_CHARGING"
+
+        # 4. 判定游戏与防抖逻辑
+        if [ "$SCREEN_ON" -eq 0 ]; then
+            # 熄屏时立即退出游戏延时保持，切入熄屏方案
+            game_hold=0
+            CURRENT_TOP="${top:-熄屏待机}"
+        elif is_game_app "$top"; then
             CURRENT_TOP="$top"
             game_hold=5
         else
@@ -422,6 +527,7 @@ main_daemon_loop() {
             fi
         fi
 
+        # 5. 核心方案裁决
         if [ "$BATT_TEMP" -ge 48 ] || [ "$BOARD_TEMP" -ge 55 ]; then
             STATUS_TITLE="过热安全保护"
             ACTIVE_PROFILE="safety_guard"
@@ -430,6 +536,20 @@ main_daemon_loop() {
             CORES_LOCKED=0
             echo 0 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
             echo 12 > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
+        elif [ "$SCREEN_ON" -eq 0 ] && [ "$IS_CHARGING" -eq 1 ]; then
+            STATUS_TITLE="熄屏快充模式"
+            ACTIVE_PROFILE="screen_off_charge"
+            ACTIVE_PROFILE_NAME="熄屏快充 (${WALL_OFF_CHG}°C / 90W)"
+            CURRENT_WALL="${WALL_OFF_CHG}°C"
+            CORES_LOCKED=1
+            enforce_cores_online
+            regulate_charging 90
+        elif [ "$SCREEN_ON" -eq 0 ]; then
+            STATUS_TITLE="熄屏休眠降温"
+            ACTIVE_PROFILE="screen_off_idle"
+            ACTIVE_PROFILE_NAME="熄屏低功耗 (${WALL_OFF_IDLE}°C)"
+            CURRENT_WALL="${WALL_OFF_IDLE}°C"
+            CORES_LOCKED=0
         elif [ "$game_hold" -gt 0 ]; then
             STATUS_TITLE="电竞游戏模式"
             ACTIVE_PROFILE="screen_on_game"
@@ -446,14 +566,7 @@ main_daemon_loop() {
             CORES_LOCKED=1
             enforce_cores_online
             regulate_charging "${TARGET_W}"
-        elif [ "$SCREEN_ON" -eq 0 ] && [ "$IS_CHARGING" -eq 1 ]; then
-            STATUS_TITLE="熄屏快充模式"
-            ACTIVE_PROFILE="screen_off_charge"
-            ACTIVE_PROFILE_NAME="熄屏快充 (90W)"
-            CURRENT_WALL="${WALL_OFF_CHG}°C"
-            CORES_LOCKED=1
-            regulate_charging 90
-        elif [ "$SCREEN_ON" -eq 1 ]; then
+        else
             STATUS_TITLE="日常亮屏均衡"
             ACTIVE_PROFILE="screen_on_daily"
             ACTIVE_PROFILE_NAME="日常温度墙 (${WALL_DAILY}°C)"
@@ -461,12 +574,6 @@ main_daemon_loop() {
             CORES_LOCKED=1
             enforce_cores_online
             regulate_charging "${TARGET_W}"
-        else
-            STATUS_TITLE="熄屏休眠降温"
-            ACTIVE_PROFILE="screen_off_idle"
-            ACTIVE_PROFILE_NAME="熄屏低功耗"
-            CURRENT_WALL="${WALL_OFF_IDLE}°C"
-            CORES_LOCKED=0
         fi
 
         cat <<EOF > "${STATE_FILE}.tmp"
@@ -479,8 +586,9 @@ GAME_SOURCE="${GAME_SOURCE}"
 EOF
         mv -f "${STATE_FILE}.tmp" "${STATE_FILE}" 2>/dev/null
 
+        # 6. 详细记录状态流转日志
         if [ "$ACTIVE_PROFILE" != "$last_profile" ]; then
-            log "状态切换: [${STATUS_TITLE}] -> ${ACTIVE_PROFILE_NAME} (Top: ${CURRENT_TOP:-待机})"
+            log "[状态流转] [${STATUS_TITLE}] ${ACTIVE_PROFILE_NAME} | 目标温度墙: ${CURRENT_WALL} | 板温: ${BOARD_TEMP}°C, 电池: ${BATT_TEMP}°C | 功率: ${BATT_WATTS}W | 核心锁定: $([ "$CORES_LOCKED" -eq 1 ] && echo "是" || echo "否")"
             last_profile="$ACTIVE_PROFILE"
         fi
 

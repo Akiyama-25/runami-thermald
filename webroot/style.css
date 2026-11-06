@@ -245,6 +245,16 @@ html, body {
   gap: 10px;
 }
 
+.m3e-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.m3e-grid-3 .m3e-action-btn {
+  padding: 11px 4px;
+  font-size: 12px;
+}
+
 .m3e-card-header {
   display: flex;
   align-items: center;

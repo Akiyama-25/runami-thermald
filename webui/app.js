@@ -177,6 +177,26 @@ function ksuExec(cmd) {
           ].join("\n"),
           stderr: ""
         });
+      } else if (cmd.includes("export-log")) {
+        resolve({
+          code: 0,
+          stdout: "/sdcard/Download/runami_thermald_20261106_114500.log",
+          stderr: ""
+        });
+      } else if (cmd.includes("log-full") || cmd.includes("log")) {
+        resolve({
+          code: 0,
+          stdout: `[11-06 11:30:00] Runami Thermald 守护进程启动 (PID: 1234)...
+[11-06 11:30:00] [屏幕状态] 初始检测: 亮屏
+[11-06 11:30:01] [状态流转] [日常亮屏均衡] 日常温度墙 (46°C) | 目标温度墙: 46°C | 板温: 36°C, 电池: 32°C | 功率: 0W | 核心锁定: 是
+[11-06 11:30:15] [前台应用] 切换至: com.miHoYo.Yuanshen (电竞游戏, 来源: 自定义)
+[11-06 11:30:15] [状态流转] [电竞游戏模式] 游戏独立温度墙 (52°C) | 目标温度墙: 52°C | 板温: 37°C, 电池: 33°C | 功率: 0W | 核心锁定: 是
+[11-06 11:32:40] [充电状态] 充电器接入 (状态: Charging, 功率: 42W)
+[11-06 11:35:10] [前台应用] 退回系统桌面或待机
+[11-06 11:35:20] [屏幕状态] 屏幕关闭 (熄屏/休眠/AOD)
+[11-06 11:35:20] [状态流转] [熄屏快充模式] 熄屏快充 (45°C / 90W) | 目标温度墙: 45°C | 板温: 39°C, 电池: 35°C | 功率: 45W | 核心锁定: 是`,
+          stderr: ""
+        });
       } else {
         resolve({ code: 0, stdout: "Mock success", stderr: "" });
       }
@@ -992,11 +1012,52 @@ function setupGameSearch() {
   });
 }
 
-// 22. 诊断与恢复操作
+// 22. 日志刷新、导出与恢复操作
 document.getElementById("btn-refresh-log")?.addEventListener("click", () => {
   fetchLogs();
   showToast("日志已刷新");
 });
+
+async function exportLog() {
+  showToast("正在导出运行日志...");
+
+  // 1. 调用 CLI 导出至 /sdcard/Download
+  let exportedPath = "";
+  const res = await ksuExec(`${DAEMON_CLI} export-log`);
+  if (res.code === 0 && res.stdout && res.stdout.includes(".log")) {
+    exportedPath = res.stdout.trim();
+  }
+
+  // 2. 同时获取完整日志通过浏览器 Blob 触发文件保存/下载
+  const fullLogRes = await ksuExec(`${DAEMON_CLI} log-full`);
+  const logContent = fullLogRes.stdout || document.getElementById("log-terminal")?.innerText || "";
+
+  if (logContent && logContent.trim() && !logContent.includes("暂无运行日志")) {
+    try {
+      const blob = new Blob([logContent], { type: "text/plain;charset=utf-8" });
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, "0");
+      const filename = `runami_thermald_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.log`;
+
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    } catch (_) {}
+  }
+
+  if (exportedPath) {
+    showToast(`已导出: ${exportedPath}`);
+  } else {
+    showToast("日志已导出下载");
+  }
+}
+
+document.getElementById("btn-export-log")?.addEventListener("click", exportLog);
+document.getElementById("btn-export-log-icon")?.addEventListener("click", exportLog);
 
 document.getElementById("btn-diagnose")?.addEventListener("click", async () => {
   showToast("正在诊断节点...");

@@ -4,6 +4,10 @@
 
 MODDIR=${0%/*}
 
+# 开机重启清除旧运行日志 (日志不设上限，单次开机周期全量留存)
+DATADIR="/data/adb/runami_thermald"
+rm -f "${DATADIR}/runami.log"* 2>/dev/null
+
 # 等待系统完整就绪
 until [ "$(getprop sys.boot_completed)" = "1" ]; do
     sleep 2
