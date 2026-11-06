@@ -406,6 +406,7 @@ html, body {
 .m3e-row-value.highlight { color: var(--m3e-primary); }
 .m3e-row-value.ok-text { color: var(--m3e-ok); }
 .m3e-row-value.warn-text { color: var(--m3e-warn); }
+.m3e-row-value.muted-text { color: var(--m3e-text-muted); }
 
 /* 温度趋势图 (平坦极简，无荧光滤镜) */
 .m3e-chart-container {
@@ -551,7 +552,7 @@ html, body {
   color: var(--m3e-text-muted);
 }
 
-/* 滑块组件 */
+/* 滑块组件 (高对比度原生 Material 3 规范) */
 .m3e-slider-wrap { width: 100%; }
 
 .m3e-slider-header {
@@ -564,48 +565,78 @@ html, body {
 .m3e-slider-badge {
   font-size: 13px;
   font-weight: 700;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: var(--radius-pill);
   background: var(--m3e-surface-card);
   color: var(--m3e-text-main);
 }
-.m3e-slider-badge.highlight { color: var(--m3e-primary); }
+.m3e-slider-badge.highlight {
+  background: var(--m3e-primary-container);
+  color: var(--m3e-on-primary-container);
+}
 
 .m3e-range-track-container {
   position: relative;
   width: 100%;
   display: flex;
   align-items: center;
+  padding: 6px 0;
 }
 
 .m3e-slider {
   -webkit-appearance: none;
+  appearance: none;
   width: 100%;
-  height: 8px;
+  height: 10px;
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.08);
+  background: linear-gradient(
+    to right,
+    var(--m3e-primary) 0%,
+    var(--m3e-primary) var(--slider-pct, 50%),
+    rgba(255, 255, 255, 0.24) var(--slider-pct, 50%),
+    rgba(255, 255, 255, 0.24) 100%
+  );
   outline: none;
   cursor: pointer;
+  margin: 0;
+  border: none;
 }
 
 .m3e-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 22px;
-  height: 22px;
+  appearance: none;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: var(--m3e-primary);
   cursor: pointer;
-  border: 2px solid var(--m3e-surface-card);
+  border: 3px solid var(--m3e-surface-block);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25);
+  transition: transform 0.15s ease;
+}
+
+.m3e-slider::-webkit-slider-thumb:active {
+  transform: scale(1.15);
+}
+
+.m3e-slider::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--m3e-primary);
+  cursor: pointer;
+  border: 3px solid var(--m3e-surface-block);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25);
 }
 
 .m3e-slider-bubble {
   position: absolute;
-  top: -30px;
+  top: -28px;
   left: 50%;
   transform: translateX(-50%) scale(0.85);
   background: var(--m3e-primary);
   color: var(--m3e-on-primary);
-  padding: 2px 7px;
+  padding: 3px 8px;
   border-radius: 6px;
   font-size: 11px;
   font-weight: 700;
@@ -613,6 +644,7 @@ html, body {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 10;
 }
 
 .m3e-slider-bubble.visible {
@@ -623,10 +655,11 @@ html, body {
 .m3e-slider-scale {
   display: flex;
   justify-content: space-between;
-  font-size: 10.5px;
-  color: var(--m3e-text-sub);
+  font-size: 11px;
+  color: var(--m3e-text-muted);
   margin-top: 6px;
   padding: 0 4px;
+  font-weight: 500;
 }
 
 /* 开关行 (无任何描边与外阴影) */

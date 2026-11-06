@@ -176,13 +176,6 @@ case "$1" in
             pm list packages -3 2>/dev/null | sed -e 's/^package://' | sort
         elif command -v cmd >/dev/null 2>&1; then
             cmd package list packages -3 2>/dev/null | sed -e 's/^package://' | sort
-        else
-            echo "com.miHoYo.Yuanshen"
-            echo "com.miHoYo.hkrpg"
-            echo "com.miHoYo.Nap"
-            echo "com.tencent.tmgp.sgame"
-            echo "com.tencent.tmgp.pubgmhd"
-            echo "com.hypergryph.arknights"
         fi
         ;;
     diagnose)

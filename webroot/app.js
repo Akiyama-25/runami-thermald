@@ -125,7 +125,9 @@ function ksuExec(cmd) {
             device: "houji (Xiaomi 14)",
             activeProfile: "screen_on_game",
             activeProfileName: "电竞游戏模式",
-            statusTitle: "游戏温度墙生效中",
+            statusTitle: "游戏模式",
+            currentWall: "52°C",
+            coresLocked: true,
             topApp: "com.miHoYo.Yuanshen",
             isGame: true,
             gameSource: "custom",
@@ -133,8 +135,8 @@ function ksuExec(cmd) {
             power: { charging: true, watts: 42, xmGear: 6, xmRemove: 1 },
             screenOn: true,
             cpus: { policy0: 1785, policy2: 2476, policy5: 2476, policy7: 3187, gpu: 770 },
-            customGamesCount: 5,
-            sceneGamesCount: 4
+            customGamesCount: 0,
+            sceneGamesCount: 0
           }),
           stderr: ""
         });
@@ -153,13 +155,7 @@ function ksuExec(cmd) {
               screen_off_idle: { name: "熄屏休眠", thermal_wall: 42, clear_hysteresis: 2, charge_power_limit: 18, lock_cores_online: false }
             },
             charge_control: { enabled: true, target_watts: 45, battery_protect_temp: 46 },
-            custom_games: [
-              "com.miHoYo.Yuanshen",
-              "com.miHoYo.hkrpg",
-              "com.miHoYo.Nap",
-              "com.tencent.tmgp.sgame",
-              "com.tencent.tmgp.pubgmhd"
-            ]
+            custom_games: []
           }),
           stderr: ""
         });
@@ -342,7 +338,7 @@ document.querySelectorAll(".profile-select-group .m3e-profile-pill").forEach((bt
   });
 });
 
-// 9. 滑块微交互
+// 9. 滑块微交互 (带动态高对比度轨道填充)
 function setupSliderWithBubble(sliderId, displayId, bubbleId, unit = "°C") {
   const slider = document.getElementById(sliderId);
   const display = document.getElementById(displayId);
@@ -350,17 +346,20 @@ function setupSliderWithBubble(sliderId, displayId, bubbleId, unit = "°C") {
   if (!slider || !display || !bubble) return;
 
   function updateBubble() {
-    const val = slider.value;
+    const val = parseFloat(slider.value) || 0;
     display.innerText = `${val} ${unit}`;
     bubble.innerText = `${val}${unit}`;
 
     const min = parseFloat(slider.min) || 0;
     const max = parseFloat(slider.max) || 100;
-    const percent = (val - min) / (max - min);
-    bubble.style.left = `${percent * 100}%`;
+    const percent = Math.max(0, Math.min(1, (val - min) / (max - min)));
+    const percentPct = percent * 100;
+    slider.style.setProperty("--slider-pct", `${percentPct}%`);
+    bubble.style.left = `${percentPct}%`;
   }
 
   slider.addEventListener("input", updateBubble);
+  slider.addEventListener("change", updateBubble);
   slider.addEventListener("pointerdown", () => {
     updateBubble();
     bubble.classList.add("visible");
@@ -368,6 +367,7 @@ function setupSliderWithBubble(sliderId, displayId, bubbleId, unit = "°C") {
   slider.addEventListener("pointerup", () => bubble.classList.remove("visible"));
   slider.addEventListener("pointercancel", () => bubble.classList.remove("visible"));
   slider.addEventListener("blur", () => bubble.classList.remove("visible"));
+  updateBubble();
 }
 
 setupSliderWithBubble("profile-trip-slider", "profile-trip-display", "profile-trip-bubble", "°C");
@@ -404,9 +404,15 @@ function updateProfileEditor() {
     lockVal = val.lock;
   }
 
-  if (tripSlider) tripSlider.value = tripVal;
+  if (tripSlider) {
+    tripSlider.value = tripVal;
+    tripSlider.dispatchEvent(new Event("input"));
+  }
   if (tripDisplay) tripDisplay.innerText = `${tripVal} °C`;
-  if (hystSlider) hystSlider.value = hystVal;
+  if (hystSlider) {
+    hystSlider.value = hystVal;
+    hystSlider.dispatchEvent(new Event("input"));
+  }
   if (hystDisplay) hystDisplay.innerText = `${hystVal} °C`;
   if (lockCores) lockCores.checked = lockVal;
 
@@ -705,6 +711,26 @@ async function fetchStatus() {
         daemonChipText.innerText = data.running ? "RUNNING" : "STANDBY";
       }
 
+      // 防拔核状态 ("锁定全核心" / "未生效")
+      const coresStatusEl = document.getElementById("val-cores-status");
+      if (coresStatusEl) {
+        const isLocked = data.running && data.coresLocked !== false;
+        coresStatusEl.innerText = isLocked ? "锁定全核心" : "未生效";
+        coresStatusEl.className = isLocked ? "m3e-row-value ok-text" : "m3e-row-value muted-text";
+      }
+
+      // 当前温控墙
+      const wallEl = document.getElementById("val-thermal-wall");
+      if (wallEl) {
+        let wallStr = data.currentWall;
+        if (!wallStr) {
+          const prof = data.activeProfile || "screen_on_daily";
+          const wallNum = appConfig?.profiles?.[prof]?.thermal_wall || 46;
+          wallStr = `${wallNum} °C`;
+        }
+        wallEl.innerText = wallStr;
+      }
+
       // CPU 4 簇频点
       const p7 = data.cpus.policy7 || 0;
       const p5 = data.cpus.policy5 || 0;
@@ -747,7 +773,7 @@ async function fetchUserApps() {
     userApps = res.stdout.split("\n").map(l => l.trim()).filter(l => l.length > 0 && l.includes("."));
   }
   if (!userApps || userApps.length === 0) {
-    userApps = Object.keys(APP_NAMES);
+    userApps = [];
   }
 }
 

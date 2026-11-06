@@ -65,7 +65,7 @@ fi
 if [ -f "/data/data/com.omarea.vtools/shared_prefs/games.xml" ] || [ -f "/data/user/0/com.omarea.vtools/shared_prefs/games.xml" ]; then
     ui_print "  [√] 发现已安装的 Scene (vtools) 应用，游戏列表联动已就绪！"
 else
-    ui_print "  [i] 未检测到 Scene 配置，模块将内置王者荣耀/原神/崩铁等热门电竞列表。"
+    ui_print "  [i] 未检测到 Scene 配置，可通过 WebUI 控制面板自定义添加游戏。"
 fi
 
 # 初始化持久化配置目录

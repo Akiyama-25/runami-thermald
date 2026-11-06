@@ -79,9 +79,8 @@ load_config() {
     TARGET_W=${TARGET_W:-45}
 
     CUSTOM_GAMES=$(awk '/"custom_games"/, /]/' "${CONFIG_FILE}" 2>/dev/null | grep -o '"[a-zA-Z0-9_.]\+"' | grep '\.' | tr -d '"' | tr '\n' ' ')
-    if [ -z "$CUSTOM_GAMES" ]; then
-        CUSTOM_GAMES="com.miHoYo.Yuanshen com.miHoYo.hkrpg com.miHoYo.Nap com.tencent.tmgp.sgame com.tencent.tmgp.pubgmhd"
-    fi
+    WALL_OFF_IDLE=$(grep -A 8 '"screen_off_idle"' "${CONFIG_FILE}" 2>/dev/null | grep '"thermal_wall"' | grep -o '[0-9]*' | head -n1)
+    WALL_OFF_IDLE=${WALL_OFF_IDLE:-42}
 }
 
 # 7-NTC 传感矩阵读取与加权板温合成 (带多层 fallback)
@@ -244,7 +243,7 @@ is_game_app() {
         fi
     done
     # 2. 其次匹配 Scene 游戏列表
-    for g in $SCENE_GAMES com.hypergryph.arknights; do
+    for g in $SCENE_GAMES; do
         if [ "$pkg" = "$g" ]; then
             GAME_SOURCE="scene"
             return 0
@@ -336,6 +335,30 @@ dump_status_json() {
         fi
     fi
 
+    if [ -f "${STATE_FILE}" ]; then
+        . "${STATE_FILE}" 2>/dev/null
+    fi
+
+    if [ -z "$CURRENT_WALL" ]; then
+        load_config
+        if [ "$is_g" = "true" ]; then
+            CURRENT_WALL="${WALL_GAME:-52}°C"
+            CORES_LOCKED=1
+        elif [ "$SCREEN_ON" -eq 1 ] && [ "$IS_CHARGING" -eq 1 ]; then
+            CURRENT_WALL="${WALL_CHARGE:-44}°C"
+            CORES_LOCKED=1
+        elif [ "$SCREEN_ON" -eq 0 ] && [ "$IS_CHARGING" -eq 1 ]; then
+            CURRENT_WALL="${WALL_OFF_CHG:-45}°C"
+            CORES_LOCKED=1
+        elif [ "$SCREEN_ON" -eq 1 ]; then
+            CURRENT_WALL="${WALL_DAILY:-46}°C"
+            CORES_LOCKED=1
+        else
+            CURRENT_WALL="${WALL_OFF_IDLE:-42}°C"
+            CORES_LOCKED=0
+        fi
+    fi
+
     cat <<EOF
 {
   "running": ${is_daemon_running},
@@ -343,6 +366,8 @@ dump_status_json() {
   "activeProfile": "${ACTIVE_PROFILE:-screen_on_daily}",
   "activeProfileName": "${ACTIVE_PROFILE_NAME:-日常亮屏模式}",
   "statusTitle": "${STATUS_TITLE:-运行中}",
+  "currentWall": "${CURRENT_WALL:-46°C}",
+  "coresLocked": $([ "${CORES_LOCKED:-1}" = "1" ] && [ "${is_daemon_running}" = "true" ] && echo true || echo false),
   "topApp": "${top}",
   "isGame": ${is_g},
   "temps": {
@@ -401,36 +426,58 @@ main_daemon_loop() {
             STATUS_TITLE="过热安全保护"
             ACTIVE_PROFILE="safety_guard"
             ACTIVE_PROFILE_NAME="过热回退官方"
+            CURRENT_WALL="48°C"
+            CORES_LOCKED=0
             echo 0 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
             echo 12 > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
         elif [ "$game_hold" -gt 0 ]; then
             STATUS_TITLE="电竞游戏模式"
             ACTIVE_PROFILE="screen_on_game"
             ACTIVE_PROFILE_NAME="游戏独立温度墙 (${WALL_GAME}°C)"
+            CURRENT_WALL="${WALL_GAME}°C"
+            CORES_LOCKED=1
             enforce_cores_online
             regulate_charging 18
         elif [ "$SCREEN_ON" -eq 1 ] && [ "$IS_CHARGING" -eq 1 ]; then
             STATUS_TITLE="亮屏充电稳充"
             ACTIVE_PROFILE="screen_on_charge"
             ACTIVE_PROFILE_NAME="亮屏稳充 (${WALL_CHARGE}°C)"
+            CURRENT_WALL="${WALL_CHARGE}°C"
+            CORES_LOCKED=1
             enforce_cores_online
             regulate_charging "${TARGET_W}"
         elif [ "$SCREEN_ON" -eq 0 ] && [ "$IS_CHARGING" -eq 1 ]; then
             STATUS_TITLE="熄屏快充模式"
             ACTIVE_PROFILE="screen_off_charge"
             ACTIVE_PROFILE_NAME="熄屏快充 (90W)"
+            CURRENT_WALL="${WALL_OFF_CHG}°C"
+            CORES_LOCKED=1
             regulate_charging 90
         elif [ "$SCREEN_ON" -eq 1 ]; then
             STATUS_TITLE="日常亮屏均衡"
             ACTIVE_PROFILE="screen_on_daily"
             ACTIVE_PROFILE_NAME="日常温度墙 (${WALL_DAILY}°C)"
+            CURRENT_WALL="${WALL_DAILY}°C"
+            CORES_LOCKED=1
             enforce_cores_online
             regulate_charging "${TARGET_W}"
         else
             STATUS_TITLE="熄屏休眠降温"
             ACTIVE_PROFILE="screen_off_idle"
             ACTIVE_PROFILE_NAME="熄屏低功耗"
+            CURRENT_WALL="${WALL_OFF_IDLE}°C"
+            CORES_LOCKED=0
         fi
+
+        cat <<EOF > "${STATE_FILE}.tmp"
+ACTIVE_PROFILE="${ACTIVE_PROFILE}"
+ACTIVE_PROFILE_NAME="${ACTIVE_PROFILE_NAME}"
+STATUS_TITLE="${STATUS_TITLE}"
+CURRENT_WALL="${CURRENT_WALL}"
+CORES_LOCKED="${CORES_LOCKED}"
+GAME_SOURCE="${GAME_SOURCE}"
+EOF
+        mv -f "${STATE_FILE}.tmp" "${STATE_FILE}" 2>/dev/null
 
         if [ "$ACTIVE_PROFILE" != "$last_profile" ]; then
             log "状态切换: [${STATUS_TITLE}] -> ${ACTIVE_PROFILE_NAME} (Top: ${CURRENT_TOP:-待机})"

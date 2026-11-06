@@ -7,7 +7,7 @@
   <!-- 引入 KernelSU 原生动态莫奈取色与安全区域内边距 -->
   <link rel="stylesheet" href="/internal/colors.css">
   <link rel="stylesheet" href="/internal/insets.css">
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
   <div class="m3e-shell">
@@ -103,11 +103,11 @@
         <div class="m3e-block" style="margin-top: 10px;">
           <div class="m3e-row">
             <span class="m3e-row-label">防拔核</span>
-            <span class="m3e-row-value ok-text" id="val-cores-status">8核在线 (锁定)</span>
+            <span class="m3e-row-value ok-text" id="val-cores-status">锁定全核心</span>
           </div>
           <div class="m3e-row">
-            <span class="m3e-row-label">安全温控</span>
-            <span class="m3e-row-value ok-text" id="val-guard-status">就绪 (48°C 保护)</span>
+            <span class="m3e-row-label">当前温控墙</span>
+            <span class="m3e-row-value highlight mono" id="val-thermal-wall">-- °C</span>
           </div>
         </div>
       </div>
@@ -369,6 +369,6 @@
     </footer>
   </div>
 
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>
