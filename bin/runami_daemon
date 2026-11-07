@@ -77,25 +77,46 @@ load_config() {
     WALL_OFF_IDLE=${WALL_OFF_IDLE:-42}
 }
 
-# 屏幕点亮/熄屏状态多源权威探测 (解决 HyperOS / Android 熄屏识别失效问题)
+# 安全执行 dumpsys 命令，严格设置超时防卡死 (避免系统深度休眠挂起期间 Binder IPC 死锁)
+run_dumpsys() {
+    local service="$1"
+    shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 1.2 dumpsys -t 1 "$service" "$@" 2>/dev/null
+    else
+        dumpsys -t 1 "$service" "$@" 2>/dev/null
+    fi
+}
+
+# 屏幕点亮/熄屏状态多源权威探测 (解决 HyperOS / Android 熄屏识别失效与多背光节点误判问题)
 check_screen_on() {
-    # 1. 尝试从 thermal_message 驱动节点直接读取
-    for sf in "${THERMAL_MSG}/screen_state" "/sys/class/thermal/thermal_message/screen_state"; do
-        if [ -r "$sf" ]; then
-            local raw=$(cat "$sf" 2>/dev/null)
-            if [ "$raw" = "0" ]; then
-                echo 0
-                return
-            elif [ "$raw" = "1" ]; then
+    # 1. 优先极速检查显示背光亮度 (任一显示面板 brightness > 0 即可绝对断定亮屏，避免无谓 dumpsys 开销)
+    local has_bl=0
+    for bl in /sys/class/backlight/*/brightness; do
+        if [ -r "$bl" ]; then
+            has_bl=1
+            local bv=$(cat "$bl" 2>/dev/null || echo 0)
+            if [ "$bv" -gt 0 ]; then
                 echo 1
                 return
             fi
         fi
     done
 
-    # 2. Android Framework 权威电源状态检测 (dumpsys power 前 35 行极速截取)
+    # 2. 尝试从 thermal_message 驱动节点直接读取
+    for sf in "${THERMAL_MSG}/screen_state" "/sys/class/thermal/thermal_message/screen_state"; do
+        if [ -r "$sf" ]; then
+            local raw=$(cat "$sf" 2>/dev/null)
+            if [ "$raw" = "1" ]; then
+                echo 1
+                return
+            fi
+        fi
+    done
+
+    # 3. Android Framework 权威电源状态检测 (带超时保护，杜绝休眠期阻塞)
     if command -v dumpsys >/dev/null 2>&1; then
-        local pwr=$(dumpsys power 2>/dev/null | head -n 35)
+        local pwr=$(run_dumpsys power | head -n 35)
         if [ -n "$pwr" ]; then
             local wake=$(echo "$pwr" | grep -m1 "mWakefulness=" | cut -d'=' -f2 | tr -d '\r\n ')
             if [ -n "$wake" ]; then
@@ -111,18 +132,18 @@ check_screen_on() {
                 esac
             fi
 
-            if echo "$pwr" | grep -qE "mIsInteractive[:=][[:space:]]*false|mInteractive[:=][[:space:]]*false"; then
-                echo 0
-                return
-            fi
             if echo "$pwr" | grep -qE "mIsInteractive[:=][[:space:]]*true|mInteractive[:=][[:space:]]*true"; then
                 echo 1
                 return
             fi
+            if echo "$pwr" | grep -qE "mIsInteractive[:=][[:space:]]*false|mInteractive[:=][[:space:]]*false"; then
+                echo 0
+                return
+            fi
         fi
 
-        # 3. 备选检测: dumpsys display 状态
-        local d_state=$(dumpsys display 2>/dev/null | grep -m1 -E "mState=OFF|mActualDisplayState=OFF|mState=ON|mActualDisplayState=ON")
+        # 4. 备选检测: dumpsys display 状态
+        local d_state=$(run_dumpsys display | grep -m1 -E "mState=OFF|mActualDisplayState=OFF|mState=ON|mActualDisplayState=ON")
         if [ -n "$d_state" ]; then
             if echo "$d_state" | grep -qi "OFF"; then
                 echo 0
@@ -134,18 +155,24 @@ check_screen_on() {
         fi
     fi
 
-    # 4. 备选检查: 背光亮度是否为 0
-    for bl in /sys/class/backlight/*/brightness; do
-        if [ -r "$bl" ]; then
-            local bv=$(cat "$bl" 2>/dev/null || echo -1)
-            if [ "$bv" = "0" ]; then
+    # 5. 若 thermal_message 驱动节点明确为 0，且上述亮屏检测均未触发
+    for sf in "${THERMAL_MSG}/screen_state" "/sys/class/thermal/thermal_message/screen_state"; do
+        if [ -r "$sf" ]; then
+            local raw=$(cat "$sf" 2>/dev/null)
+            if [ "$raw" = "0" ]; then
                 echo 0
                 return
             fi
         fi
     done
 
-    # 5. 默认兜底为亮屏 (1)
+    # 6. 若存在背光节点且所有背光读数均为 0，则认定为熄屏
+    if [ "$has_bl" -eq 1 ]; then
+        echo 0
+        return
+    fi
+
+    # 7. 默认兜底为亮屏 (1)
     echo 1
 }
 
@@ -203,7 +230,14 @@ read_sensors() {
     fi
 
     BATT_STATUS=$(cat "${BATT_DIR}/status" 2>/dev/null || echo "Discharging")
-    if [ "$BATT_STATUS" = "Charging" ] || [ "$BATT_STATUS" = "Full" ]; then
+    local usb_online=0
+    for u in /sys/class/power_supply/usb/online /sys/class/power_supply/charger/online /sys/class/power_supply/wireless/online /sys/class/power_supply/main/online; do
+        if [ -f "$u" ] && [ "$(cat "$u" 2>/dev/null)" = "1" ]; then
+            usb_online=1
+            break
+        fi
+    done
+    if [ "$BATT_STATUS" = "Charging" ] || [ "$BATT_STATUS" = "Full" ] || [ "$usb_online" -eq 1 ]; then
         IS_CHARGING=1
     else
         IS_CHARGING=0
@@ -238,9 +272,9 @@ is_ignored_app() {
 get_top_app() {
     local top_pkg=""
 
-    # 策略 1: 优先获取系统当前获焦与恢复态前台活动窗口
+    # 策略 1: 优先获取系统当前获焦与恢复态前台活动窗口 (严格超时保护)
     if command -v dumpsys >/dev/null 2>&1; then
-        local focus_str=$(dumpsys window 2>/dev/null | grep -E "mCurrentFocus|mFocusedApp" | head -n2)
+        local focus_str=$(run_dumpsys window | grep -E "mCurrentFocus|mFocusedApp" | head -n2)
         if [ -n "$focus_str" ]; then
             local cand=$(echo "$focus_str" | grep -oE "[a-zA-Z0-9._]+/[a-zA-Z0-9._]+" | head -n1 | cut -d'/' -f1)
             if [ -n "$cand" ] && ! is_ignored_app "$cand"; then
@@ -248,7 +282,7 @@ get_top_app() {
                 return
             fi
         fi
-        local resume_str=$(dumpsys activity activities 2>/dev/null | grep -E "topResumedActivity|mResumedActivity" | head -n2)
+        local resume_str=$(run_dumpsys activity activities | grep -E "topResumedActivity|mResumedActivity" | head -n2)
         if [ -n "$resume_str" ]; then
             local cand=$(echo "$resume_str" | grep -oE "[a-zA-Z0-9._]+/[a-zA-Z0-9._]+" | head -n1 | cut -d'/' -f1)
             if [ -n "$cand" ] && ! is_ignored_app "$cand"; then
@@ -366,7 +400,12 @@ update_module_prop() {
 dump_status_json() {
     read_sensors
     get_scene_games
-    local top=$(get_top_app)
+    local top=""
+    if [ "$SCREEN_ON" -eq 0 ]; then
+        top=""
+    else
+        top=$(get_top_app)
+    fi
     local is_g="false"
     if is_game_app "$top"; then
         is_g="true"
@@ -389,34 +428,76 @@ dump_status_json() {
     local gpu_clk=$(cat /sys/class/kgsl/kgsl-3d0/gpuclk 2>/dev/null || echo 315000000)
 
     local is_daemon_running="false"
+    local now=$(date +%s)
+    local dpid=""
     if [ -f "${PID_FILE}" ]; then
-        local dpid=$(cat "${PID_FILE}" 2>/dev/null)
+        dpid=$(cat "${PID_FILE}" 2>/dev/null)
         if [ -n "$dpid" ] && [ -d "/proc/$dpid" ]; then
-            is_daemon_running="true"
+            local pname=$(cat "/proc/$dpid/cmdline" 2>/dev/null | tr '\0' ' ')
+            if echo "$pname" | grep -q "runami_daemon"; then
+                is_daemon_running="true"
+            fi
         fi
     fi
 
+    local state_stale=1
     if [ -f "${STATE_FILE}" ]; then
         . "${STATE_FILE}" 2>/dev/null
+        if [ -n "$LAST_HEARTBEAT" ] && [ $((now - LAST_HEARTBEAT)) -le 10 ]; then
+            state_stale=0
+        fi
     fi
 
-    if [ -z "$CURRENT_WALL" ]; then
+    # 守护进程自愈机制：若PID存在但超过10秒无心跳（表明卡死挂起），强制拉起自愈重启
+    if [ "$is_daemon_running" = "true" ] && [ "$state_stale" -eq 1 ] && [ -n "$dpid" ]; then
+        kill -9 "$dpid" 2>/dev/null
+        rm -f "${PID_FILE}"
+        nohup "$0" --run >/dev/null 2>&1 &
+        is_daemon_running="true"
+    fi
+
+    # 若状态过期或温控墙为空，严格基于实时硬件传感器裁决真实状态，绝不呈现陈旧休眠假象
+    if [ "$state_stale" -eq 1 ] || [ -z "$CURRENT_WALL" ]; then
         load_config
-        if [ "$is_g" = "true" ]; then
+        if [ "$BATT_TEMP" -ge 48 ] || [ "$BOARD_TEMP" -ge 55 ]; then
+            STATUS_TITLE="过热安全保护"
+            ACTIVE_PROFILE="safety_guard"
+            ACTIVE_PROFILE_NAME="过热回退官方"
+            CURRENT_WALL="48°C"
+            CORES_LOCKED=0
+        elif [ "$is_g" = "true" ]; then
+            STATUS_TITLE="电竞游戏模式"
+            ACTIVE_PROFILE="screen_on_game"
+            ACTIVE_PROFILE_NAME="游戏独立温度墙 (${WALL_GAME:-52}°C)"
             CURRENT_WALL="${WALL_GAME:-52}°C"
             CORES_LOCKED=1
         elif [ "$SCREEN_ON" -eq 1 ] && [ "$IS_CHARGING" -eq 1 ]; then
+            STATUS_TITLE="亮屏充电稳充"
+            ACTIVE_PROFILE="screen_on_charge"
+            ACTIVE_PROFILE_NAME="亮屏稳充 (${WALL_CHARGE:-44}°C)"
             CURRENT_WALL="${WALL_CHARGE:-44}°C"
             CORES_LOCKED=1
         elif [ "$SCREEN_ON" -eq 0 ] && [ "$IS_CHARGING" -eq 1 ]; then
+            STATUS_TITLE="熄屏快充模式"
+            ACTIVE_PROFILE="screen_off_charge"
+            ACTIVE_PROFILE_NAME="熄屏快充 (${WALL_OFF_CHG:-45}°C / 90W)"
             CURRENT_WALL="${WALL_OFF_CHG:-45}°C"
             CORES_LOCKED=1
         elif [ "$SCREEN_ON" -eq 1 ]; then
+            STATUS_TITLE="日常亮屏均衡"
+            ACTIVE_PROFILE="screen_on_daily"
+            ACTIVE_PROFILE_NAME="日常温度墙 (${WALL_DAILY:-46}°C)"
             CURRENT_WALL="${WALL_DAILY:-46}°C"
             CORES_LOCKED=1
         else
-            CURRENT_WALL="${WALL_OFF_IDLE:-42}°C"
+            STATUS_TITLE="熄屏休眠降温"
+            ACTIVE_PROFILE="screen_off_idle"
+            ACTIVE_PROFILE_NAME="熄屏低功耗 (${WALL_OFF_IDLE:-42}°C)"
+            CURRENT_WALL="${WALL_OFF_IDLE}°C"
             CORES_LOCKED=0
+        fi
+        if [ "$CORES_LOCKED" -eq 1 ]; then
+            enforce_cores_online
         fi
     fi
 
@@ -473,7 +554,12 @@ main_daemon_loop() {
     while true; do
         read_sensors
         get_scene_games
-        local top=$(get_top_app)
+        local top=""
+        if [ "$SCREEN_ON" -eq 0 ]; then
+            top=""
+        else
+            top=$(get_top_app)
+        fi
 
         # 1. 详细记录前台应用切换
         if [ "$top" != "$last_top" ]; then
@@ -583,6 +669,8 @@ STATUS_TITLE="${STATUS_TITLE}"
 CURRENT_WALL="${CURRENT_WALL}"
 CORES_LOCKED="${CORES_LOCKED}"
 GAME_SOURCE="${GAME_SOURCE}"
+LAST_HEARTBEAT="$(date +%s)"
+DAEMON_PID="$$"
 EOF
         mv -f "${STATE_FILE}.tmp" "${STATE_FILE}" 2>/dev/null
 
@@ -598,7 +686,11 @@ EOF
             last_state_save=$now
         fi
 
-        sleep 1.5
+        if [ "$SCREEN_ON" -eq 0 ]; then
+            sleep 3.5
+        else
+            sleep 1.5
+        fi
     done
 }
 
@@ -624,10 +716,11 @@ case "$1" in
     --stop|-k)
         if [ -f "${PID_FILE}" ]; then
             kill -9 $(cat "${PID_FILE}") 2>/dev/null
-            rm -f "${PID_FILE}"
+            rm -f "${PID_FILE}" "${STATE_FILE}" 2>/dev/null
             echo "Runami Thermald 已停止"
         else
             killall -9 runami_daemon 2>/dev/null
+            rm -f "${PID_FILE}" "${STATE_FILE}" 2>/dev/null
         fi
         echo 0 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
         ;;

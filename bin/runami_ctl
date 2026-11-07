@@ -93,7 +93,7 @@ case "$1" in
     restart)
         "$DAEMON" --stop
         sleep 1
-        rm -f "${DATADIR}/runami.log"* 2>/dev/null
+        rm -f "${DATADIR}/runami.log"* "${DATADIR}/state.json"* 2>/dev/null
         "$DAEMON" --start
         ;;
     clear-log)
@@ -179,11 +179,19 @@ case "$1" in
         done
         ;;
     list-user-apps)
-        # 仅搜索用户空间应用 (-3)
-        if command -v pm >/dev/null 2>&1; then
-            pm list packages -3 2>/dev/null | sed -e 's/^package://' | sort
-        elif command -v cmd >/dev/null 2>&1; then
-            cmd package list packages -3 2>/dev/null | sed -e 's/^package://' | sort
+        # 仅搜索用户空间应用 (-3，带超时保护)
+        if command -v timeout >/dev/null 2>&1; then
+            if command -v pm >/dev/null 2>&1; then
+                timeout 3 pm list packages -3 2>/dev/null | sed -e 's/^package://' | sort
+            elif command -v cmd >/dev/null 2>&1; then
+                timeout 3 cmd package list packages -3 2>/dev/null | sed -e 's/^package://' | sort
+            fi
+        else
+            if command -v pm >/dev/null 2>&1; then
+                pm list packages -3 2>/dev/null | sed -e 's/^package://' | sort
+            elif command -v cmd >/dev/null 2>&1; then
+                cmd package list packages -3 2>/dev/null | sed -e 's/^package://' | sort
+            fi
         fi
         ;;
     diagnose)

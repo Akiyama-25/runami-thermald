@@ -721,8 +721,16 @@ async function fetchStatus() {
       if (profileChip) {
         if (data.isGame) {
           profileChip.innerText = data.gameSource === "custom" ? "游戏模式 (自定义优先)" : "游戏模式 (Scene联动)";
+          profileChip.className = "m3e-chip warn";
+        } else if (data.activeProfile === "screen_off_idle") {
+          profileChip.innerText = data.statusTitle || data.activeProfileName || "熄屏休眠";
+          profileChip.className = "m3e-chip idle";
+        } else if (data.activeProfile === "screen_off_charge" || data.activeProfile === "screen_on_charge") {
+          profileChip.innerText = data.statusTitle || data.activeProfileName || "充电中";
+          profileChip.className = "m3e-chip ok";
         } else {
-          profileChip.innerText = data.statusTitle || data.activeProfileName || "运行中";
+          profileChip.innerText = data.statusTitle || data.activeProfileName || "日常亮屏";
+          profileChip.className = "m3e-chip";
         }
       }
 
