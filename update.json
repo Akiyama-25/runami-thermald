@@ -1,6 +1,6 @@
 {
-  "version": "release-1",
-  "versionCode": 100,
-  "zipUrl": "https://github.com/Akiyama-25/runami-thermald/releases/download/release-1/Runami-Thermald-release-1.zip",
+  "version": "Runami Thermald v1.0.1",
+  "versionCode": 101,
+  "zipUrl": "https://github.com/Akiyama-25/runami-thermald/releases/download/Runami Thermald v1.0.1/Runami-Thermald-Runami Thermald v1.0.1.zip",
   "changelog": "https://raw.githubusercontent.com/Akiyama-25/runami-thermald/main/README.md"
 }
