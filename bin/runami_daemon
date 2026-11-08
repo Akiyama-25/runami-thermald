@@ -65,12 +65,14 @@ load_config() {
     WALL_CHARGE=$(grep -A 8 '"screen_on_charge"' "${CONFIG_FILE}" 2>/dev/null | grep '"thermal_wall"' | grep -o '[0-9]*' | head -n1)
     WALL_OFF_CHG=$(grep -A 8 '"screen_off_charge"' "${CONFIG_FILE}" 2>/dev/null | grep '"thermal_wall"' | grep -o '[0-9]*' | head -n1)
     TARGET_W=$(grep -A 8 '"charge_control"' "${CONFIG_FILE}" 2>/dev/null | grep '"target_watts"' | grep -o '[0-9]*' | head -n1)
+    CHARGE_ENABLED=$(grep -A 8 '"charge_control"' "${CONFIG_FILE}" 2>/dev/null | grep '"enabled"' | grep -oE 'true|false' | head -n1)
 
     WALL_GAME=${WALL_GAME:-52}
     WALL_DAILY=${WALL_DAILY:-46}
     WALL_CHARGE=${WALL_CHARGE:-44}
     WALL_OFF_CHG=${WALL_OFF_CHG:-45}
     TARGET_W=${TARGET_W:-45}
+    CHARGE_ENABLED=${CHARGE_ENABLED:-true}
 
     CUSTOM_GAMES=$(awk '/"custom_games"/, /]/' "${CONFIG_FILE}" 2>/dev/null | grep -o '"[a-zA-Z0-9_.]\+"' | grep '\.' | tr -d '"' | tr '\n' ' ')
     WALL_OFF_IDLE=$(grep -A 8 '"screen_off_idle"' "${CONFIG_FILE}" 2>/dev/null | grep '"thermal_wall"' | grep -o '[0-9]*' | head -n1)
@@ -229,6 +231,13 @@ read_sensors() {
         BATT_WATTS=0
     fi
 
+    local cap_raw=$(cat "${BATT_DIR}/capacity" 2>/dev/null || echo 50)
+    if [ "$cap_raw" -ge 0 ] 2>/dev/null && [ "$cap_raw" -le 100 ] 2>/dev/null; then
+        BATT_SOC=$cap_raw
+    else
+        BATT_SOC=50
+    fi
+
     BATT_STATUS=$(cat "${BATT_DIR}/status" 2>/dev/null || echo "Discharging")
     local usb_online=0
     for u in /sys/class/power_supply/usb/online /sys/class/power_supply/charger/online /sys/class/power_supply/wireless/online /sys/class/power_supply/main/online; do
@@ -372,27 +381,115 @@ regulate_charging() {
         fi
     fi
 
-    if [ "$IS_CHARGING" -eq 1 ]; then
-        echo 1 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
-        local cur_gear=$(cat "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null || echo 12)
-        if [ "$BATT_WATTS" -gt "$((target_w + 2))" ]; then
-            if [ "$cur_gear" -lt 12 ]; then
-                echo "$((cur_gear + 1))" > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
-            fi
-        elif [ "$BATT_WATTS" -lt "$((target_w - 3))" ]; then
-            if [ "$BATT_TEMP" -lt 45 ] && [ "$cur_gear" -gt 3 ]; then
-                echo "$((cur_gear - 1))" > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
-            fi
+    # 1. 若配置中停用 xm_power 调控，彻底交回官方原厂 (复位为 0 档)
+    if [ "${CHARGE_ENABLED}" = "false" ]; then
+        if [ "${LAST_CHG_REMOVE:-}" != "0" ]; then
+            echo 0 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
+            echo 0 > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
+            LAST_CHG_REMOVE=0
+            LAST_CHG_GEAR=0
+        fi
+        return
+    fi
+
+    # 2. 未接入充电器时，确保状态复位并保持静默
+    if [ "$IS_CHARGING" -ne 1 ]; then
+        if [ "${LAST_CHG_REMOVE:-}" != "0" ]; then
+            echo 0 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
+            echo 0 > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
+            LAST_CHG_REMOVE=0
+            LAST_CHG_GEAR=0
+            STUCK_LOW_WATTS_COUNT=0
+        fi
+        return
+    fi
+
+    # 3. 顺应锂电池恒压 (CV) 物理规律：SOC >= 85% 时电流由电芯阻抗自然收窄，退出强制干预交还原厂
+    if [ "${BATT_SOC:-50}" -ge 85 ]; then
+        if [ "${LAST_CHG_REMOVE:-}" != "0" ]; then
+            log "[xm_power] 电量已达 ${BATT_SOC}%，进入恒压阶段，交还官方自然涓流收尾"
+            echo 0 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
+            echo 0 > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
+            LAST_CHG_REMOVE=0
+            LAST_CHG_GEAR=0
+        fi
+        return
+    fi
+
+    # 4. 动态适配 CC-CV 电化学特性，分段平滑下调目标功率上限
+    local effective_target="$target_w"
+    if [ "${BATT_SOC:-50}" -ge 75 ]; then
+        if [ "$effective_target" -gt 22 ]; then
+            effective_target=22
+        fi
+    elif [ "${BATT_SOC:-50}" -ge 60 ]; then
+        if [ "$effective_target" -gt 35 ]; then
+            effective_target=35
+        fi
+    fi
+
+    # 5. 异常跌落断流自愈守护 (针对跌至 <=2W 的协议死锁/档位锁死)
+    if [ "$BATT_WATTS" -le 2 ]; then
+        STUCK_LOW_WATTS_COUNT=$(( ${STUCK_LOW_WATTS_COUNT:-0} + 1 ))
+        if [ "$STUCK_LOW_WATTS_COUNT" -ge 3 ]; then
+            log "[xm_power 自愈] 检测到充电异常跌落至 ${BATT_WATTS}W (电量 ${BATT_SOC}%)，执行重置握手自愈"
+            echo 0 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
+            echo 0 > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
+            sleep 0.5
+            echo 1 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
+            echo 0 > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
+            LAST_CHG_REMOVE=1
+            LAST_CHG_GEAR=0
+            STUCK_LOW_WATTS_COUNT=0
+            LAST_CHG_ADJUST_TIME=$(date +%s)
+            return
         fi
     else
-        echo 0 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
+        STUCK_LOW_WATTS_COUNT=0
     fi
+
+    # 6. 阻尼周期防抖 (默认 8 秒周期，稳态下禁止高频重复写节点打断 PPS 握手)
+    local now=$(date +%s)
+    local elapsed=$(( now - ${LAST_CHG_ADJUST_TIME:-0} ))
+    if [ "$elapsed" -lt 8 ]; then
+        if [ "${LAST_CHG_REMOVE:-}" != "1" ]; then
+            echo 1 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
+            LAST_CHG_REMOVE=1
+        fi
+        return
+    fi
+
+    local cur_gear=$(cat "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null)
+    cur_gear=${cur_gear:-0}
+
+    # 7. 宽死区闭环步进调控 (上浮 5W 才降流，下潜 6W 才提流；0 为最高速，10 为安全下限)
+    local new_gear="$cur_gear"
+    if [ "$BATT_WATTS" -gt "$((effective_target + 5))" ]; then
+        if [ "$cur_gear" -lt 10 ]; then
+            new_gear=$((cur_gear + 1))
+        fi
+    elif [ "$BATT_WATTS" -lt "$((effective_target - 6))" ]; then
+        if [ "$BATT_TEMP" -lt 45 ] && [ "$cur_gear" -gt 0 ]; then
+            new_gear=$((cur_gear - 1))
+        fi
+    fi
+
+    # 8. 仅在档位或开关状态真正改变时才写入硬件节点
+    if [ "$new_gear" != "$cur_gear" ] || [ "${LAST_CHG_REMOVE:-}" != "1" ]; then
+        echo 1 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
+        echo "$new_gear" > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
+        LAST_CHG_REMOVE=1
+        LAST_CHG_GEAR="$new_gear"
+        log "[xm_power] 稳充调控: 目标:${effective_target}W (设定:${target_w}W, SOC:${BATT_SOC}%) | 实时:${BATT_WATTS}W | 档位:${cur_gear}->${new_gear}"
+    fi
+
+    LAST_CHG_ADJUST_TIME=$now
 }
 
 update_module_prop() {
     local prop="${MODDIR}/module.prop"
     if [ -f "$prop" ]; then
-        local desc="【${STATUS_TITLE:-运行中}】${ACTIVE_PROFILE_NAME:-日常亮屏} | 板温:${BOARD_TEMP}°C 电池:${BATT_TEMP}°C | 功率:${BATT_WATTS}W | 8核防拔核:生效中"
+        local desc="【${STATUS_TITLE:-运行中}】${ACTIVE_PROFILE_NAME:-日常亮屏} | 板温:${BOARD_TEMP}°C 电池:${BATT_TEMP}°C (${BATT_SOC:-50}%) | 功率:${BATT_WATTS}W | 8核防拔核:生效中"
         sed -i -E "s|^description=.*|description=${desc}|" "$prop" 2>/dev/null
     fi
 }
@@ -418,7 +515,7 @@ dump_status_json() {
         fi
     fi
 
-    local xm_gear=$(cat "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null || echo 12)
+    local xm_gear=$(cat "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null || echo 0)
     local xm_remove=$(cat "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null || echo 0)
 
     local f0=$(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_cur_freq 2>/dev/null || echo 1228800)
@@ -519,8 +616,10 @@ dump_status_json() {
   "power": {
     "charging": $([ "$IS_CHARGING" -eq 1 ] && echo true || echo false),
     "watts": ${BATT_WATTS:-0},
+    "soc": ${BATT_SOC:-50},
     "xmGear": ${xm_gear},
-    "xmRemove": ${xm_remove}
+    "xmRemove": ${xm_remove},
+    "xmEnabled": $([ "${CHARGE_ENABLED}" = "true" ] && echo true || echo false)
   },
   "screenOn": $([ "$SCREEN_ON" -eq 1 ] && echo true || echo false),
   "cpus": {
@@ -550,6 +649,10 @@ main_daemon_loop() {
     local last_is_charging=""
     local last_profile=""
     local last_state_save=0
+    LAST_CHG_ADJUST_TIME=0
+    LAST_CHG_GEAR=-1
+    LAST_CHG_REMOVE=-1
+    STUCK_LOW_WATTS_COUNT=0
 
     while true; do
         read_sensors
@@ -621,7 +724,9 @@ main_daemon_loop() {
             CURRENT_WALL="48°C"
             CORES_LOCKED=0
             echo 0 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
-            echo 12 > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
+            echo 0 > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
+            LAST_CHG_REMOVE=0
+            LAST_CHG_GEAR=0
         elif [ "$SCREEN_ON" -eq 0 ] && [ "$IS_CHARGING" -eq 1 ]; then
             STATUS_TITLE="熄屏快充模式"
             ACTIVE_PROFILE="screen_off_charge"
@@ -636,6 +741,7 @@ main_daemon_loop() {
             ACTIVE_PROFILE_NAME="熄屏低功耗 (${WALL_OFF_IDLE}°C)"
             CURRENT_WALL="${WALL_OFF_IDLE}°C"
             CORES_LOCKED=0
+            regulate_charging 0
         elif [ "$game_hold" -gt 0 ]; then
             STATUS_TITLE="电竞游戏模式"
             ACTIVE_PROFILE="screen_on_game"
@@ -643,7 +749,11 @@ main_daemon_loop() {
             CURRENT_WALL="${WALL_GAME}°C"
             CORES_LOCKED=1
             enforce_cores_online
-            regulate_charging 18
+            if [ "$IS_CHARGING" -eq 1 ]; then
+                regulate_charging 18
+            else
+                regulate_charging 0
+            fi
         elif [ "$SCREEN_ON" -eq 1 ] && [ "$IS_CHARGING" -eq 1 ]; then
             STATUS_TITLE="亮屏充电稳充"
             ACTIVE_PROFILE="screen_on_charge"
@@ -659,7 +769,7 @@ main_daemon_loop() {
             CURRENT_WALL="${WALL_DAILY}°C"
             CORES_LOCKED=1
             enforce_cores_online
-            regulate_charging "${TARGET_W}"
+            regulate_charging 0
         fi
 
         cat <<EOF > "${STATE_FILE}.tmp"
@@ -723,6 +833,7 @@ case "$1" in
             rm -f "${PID_FILE}" "${STATE_FILE}" 2>/dev/null
         fi
         echo 0 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
+        echo 0 > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
         ;;
     --status-json)
         dump_status_json
@@ -730,7 +841,7 @@ case "$1" in
     --status)
         read_sensors
         echo "Runami Thermald 运行状态:"
-        echo "板温: ${BOARD_TEMP}°C | 电池: ${BATT_TEMP}°C | 充电状态: ${BATT_STATUS} | 实时功率: ${BATT_WATTS}W"
+        echo "板温: ${BOARD_TEMP}°C | 电池: ${BATT_TEMP}°C (${BATT_SOC:-50}%) | 充电状态: ${BATT_STATUS} | 实时功率: ${BATT_WATTS}W"
         echo "Top App: $(get_top_app)"
         ;;
     *)

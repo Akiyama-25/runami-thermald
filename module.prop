@@ -1,7 +1,7 @@
 id=runami_thermald
 name=Runami Thermald
-version=v1.0.0
-versionCode=100
+version=v1.0.1
+versionCode=101
 author=迷人の爱音
 description=高级温控与充电调控守护程序。支持独立状态温度墙（亮/熄屏充电与非充、游戏独立温度墙）、Scene游戏联动、xm_power硬件级充电功率闭环调节，搭载 Material 3 Expressive 风格 WebUI。
 updateJson=https://raw.githubusercontent.com/Akiyama-25/runami-thermald/main/update.json

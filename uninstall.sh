@@ -22,7 +22,7 @@ for p in \
         echo 0 > "$p/wired_thermal_remove" 2>/dev/null
     fi
     if [ -f "$p/wired_ctrl_limit" ]; then
-        echo 12 > "$p/wired_ctrl_limit" 2>/dev/null
+        echo 0 > "$p/wired_ctrl_limit" 2>/dev/null
     fi
 done
 

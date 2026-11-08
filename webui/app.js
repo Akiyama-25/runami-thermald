@@ -714,7 +714,25 @@ async function fetchStatus() {
 
       const chargeGear = document.getElementById("charge-gear-sub");
       if (chargeGear) {
-        chargeGear.innerText = `硬件档位: ${data.power.xmGear} (${data.power.charging ? "充电中" : "未充电"})`;
+        const socStr = data.power.soc != null ? `${data.power.soc}% ` : "";
+        chargeGear.innerText = `硬件档位: ${data.power.xmGear} (${data.power.charging ? socStr + "充电中" : "未充电"})`;
+      }
+
+      const chargeStateChip = document.getElementById("charge-state-chip");
+      if (chargeStateChip) {
+        if (!data.power.charging) {
+          chargeStateChip.innerText = "未接入";
+          chargeStateChip.className = "m3e-chip mini idle";
+        } else if (data.power.xmEnabled === false) {
+          chargeStateChip.innerText = "官方接管";
+          chargeStateChip.className = "m3e-chip mini idle";
+        } else if (data.power.soc >= 85) {
+          chargeStateChip.innerText = "恒压涓流";
+          chargeStateChip.className = "m3e-chip mini ok";
+        } else {
+          chargeStateChip.innerText = "稳充调控";
+          chargeStateChip.className = "m3e-chip mini ok";
+        }
       }
 
       const profileChip = document.getElementById("profile-chip");

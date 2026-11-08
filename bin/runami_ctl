@@ -148,7 +148,7 @@ case "$1" in
             echo "停用 xm_power 充电闭环管理，交回官方"
             if [ -d "${XM_CHARGER}" ]; then
                 echo 0 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
-                echo 12 > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
+                echo 0 > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
             fi
             sed -i -E 's/\"enabled\"[[:space:]]*:[[:space:]]*true/\"enabled\": false/' "${CONFIG_FILE}" 2>/dev/null
         fi
@@ -220,7 +220,7 @@ case "$1" in
         rm -rf /data/vendor/thermal/config/*
         echo "正在恢复 xm_power 官方充电档位..."
         echo 0 > "${XM_CHARGER}/wired_thermal_remove" 2>/dev/null
-        echo 12 > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
+        echo 0 > "${XM_CHARGER}/wired_ctrl_limit" 2>/dev/null
         echo "触发 mi_thermald 重载..."
         setprop ctl.restart mi_thermald 2>/dev/null || echo 0 > /sys/class/thermal/thermal_message/sconfig 2>/dev/null
         echo "官方原厂温控已完全恢复！"
