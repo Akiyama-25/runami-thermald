@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: '发布版本标签 (例如 v1.0.0，留空则自动读取 module.prop 中的 version)'
+        description: '发布版本标签 (例如 v1.0.1，留空则自动读取 module.prop 中的 version)'
         required: false
         default: ''
       release_title:
-        description: 'Release 标题 (留空则默认为版本标签)'
+        description: 'Release 标题 (留空则默认为 "Runami Thermald <版本号>")'
         required: false
         default: ''
       release_notes:
@@ -29,21 +29,50 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Determine version tag
+      - name: Determine version tag and release title
         id: get_version
         run: |
-          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
-            TAG="${{ github.event.inputs.tag_name }}"
+          RAW_TAG="${{ github.event.inputs.tag_name }}"
+          RAW_TITLE="${{ github.event.inputs.release_title }}"
+          PROP_VER=$(grep -E '^version=' module.prop | cut -d'=' -f2 | tr -d ' \r\n')
+          PROP_VER=${PROP_VER:-"v1.0.1"}
+
+          # 1. 规范化并清洗 Git Tag (不得包含空格或非法字符)
+          if [ -n "$RAW_TAG" ]; then
+            EXTRACTED=$(echo "$RAW_TAG" | grep -oE 'v?[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9.]+)?' | head -n1)
+            if [ -n "$EXTRACTED" ]; then
+              if [[ "$EXTRACTED" =~ ^[0-9] ]]; then
+                CLEAN_TAG="v${EXTRACTED}"
+              else
+                CLEAN_TAG="${EXTRACTED}"
+              fi
+            else
+              CLEAN_TAG=$(echo "$RAW_TAG" | tr -s ' ' '-' | tr -cd 'a-zA-Z0-9._-')
+            fi
           else
-            PROP_VER=$(grep -E '^version=' module.prop | cut -d'=' -f2 | tr -d ' \r\n')
-            TAG="${PROP_VER}"
+            CLEAN_TAG="${PROP_VER}"
           fi
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          TITLE="${{ github.event.inputs.release_title }}"
-          if [ -z "$TITLE" ]; then
-            TITLE="${TAG}"
+
+          if [ -z "$CLEAN_TAG" ] || ! git check-ref-format --allow-onelevel "refs/tags/${CLEAN_TAG}" 2>/dev/null; then
+            CLEAN_TAG="${PROP_VER}"
           fi
+
+          # 2. 规范化 Release Title
+          if [ -n "$RAW_TITLE" ]; then
+            TITLE="$RAW_TITLE"
+          elif [ -n "$RAW_TAG" ] && [ "$RAW_TAG" != "$CLEAN_TAG" ]; then
+            TITLE="$RAW_TAG"
+          else
+            TITLE="Runami Thermald ${CLEAN_TAG}"
+          fi
+
+          # 3. 确保 module.prop 中 version 与 tag 一致
+          sed -i -E "s/^version=.*/version=${CLEAN_TAG}/" module.prop
+
+          echo "tag=${CLEAN_TAG}" >> $GITHUB_OUTPUT
           echo "title=${TITLE}" >> $GITHUB_OUTPUT
+          echo ">>> Resolved Git Tag: ${CLEAN_TAG}"
+          echo ">>> Resolved Release Title: ${TITLE}"
 
       - name: Validate scripts and test cipher
         run: |
@@ -61,16 +90,16 @@ jobs:
           cat <<EOF > update.json
           {
             "version": "${TAG}",
-            "versionCode": ${VER_CODE:-100},
+            "versionCode": ${VER_CODE:-101},
             "zipUrl": "https://github.com/${{ github.repository }}/releases/download/${TAG}/Runami-Thermald-${TAG}.zip",
             "changelog": "https://raw.githubusercontent.com/${{ github.repository }}/main/README.md"
           }
           EOF
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if ! git diff --quiet update.json; then
-            git add update.json
-            git commit -m "chore(release): update update.json for ${TAG} [skip ci]"
+          git add update.json module.prop
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(release): bump update.json and module.prop for ${TAG} [skip ci]"
             git push origin main || true
           fi
 

@@ -8,7 +8,7 @@
 
 [![KernelSU WebUI](https://img.shields.io/badge/KernelSU-M3E%20WebUI%20(webroot)-2E7D32.svg)]()
 [![System: HyperOS 3.0](https://img.shields.io/badge/System-HyperOS%203.0%20(Android%2016)-blue.svg)]()
-[![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-red.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CI: GitHub Actions](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF.svg)]()
 
 [特性](#核心特性) | [测试平台](#测试与适配环境) | [架构原理](#架构原理) | [WebUI 体验](#m3e-webui-设计) | [安装方法](#安装方法) | [命令行](#命令行工具) | [构建与发布](#编译与流水线) | [鸣谢](#鸣谢与协议)
@@ -119,7 +119,7 @@ runami_ctl log              # 查看最近 50 条运行日志
 ```bash
 chmod +x build.sh
 ./build.sh --test       # 执行语法与 AES 引擎自检
-./build.sh --package    # 打包产出 dist/Runami-Thermald-v1.0.0.zip
+./build.sh --package    # 打包产出 dist/Runami-Thermald-v1.0.1.zip
 ```
 
 ---
@@ -132,4 +132,4 @@ chmod +x build.sh
 - [FlClash](https://github.com/chen08209/FlClash) - Material 3 Expressive (M3E) 界面设计语言、曲奇多态形变徽章 (ShapeBadge) 与互联药丸分段按钮 (Connected Pill Buttons)
 - [fas-rs](https://github.com/shadow3aaa/fas-rs) - Scene 游戏列表 XML (games.xml) 格式解析规范与联动机制
 
-本项目遵循 [GPL-3.0](LICENSE) 开源协议。
+本项目遵循 [MIT](LICENSE) 开源协议。
